@@ -1,15 +1,3 @@
-# **Reto 2 – Transformación intermedia, análisis exploratorio (Silver) y Preparacion Gold 🔧📊**
-
-## **Objetivo y solución paso a paso 🧭**
-
-### **Objetivo 🎯**
-Transformar los datos Bronze, realizar análisis exploratorio en Silver y finalmente construir la capa Gold. 
-
----
-
-## **Solución paso a paso 🪜**
-
-En este approcah se decidio trabajar tres productos de datos **Credit Scores** medallion + segmentacion de clientes con ML (KMeans), **Products** -medallion + segmentacion de productos por valor comercial con ML (KMeans), y **Business Operations** que combina tablas de transactions y products para modelar un analisis operacional de compras de clientes y productos. El ejercicio no pretende ejercer un modelado dimensional estricto y mas bien se invita a trabajar distintos enfoques, Fabric como herramienta se adapta a enfoqaues de modelado dimensional asi como enfoques de denormalizacion comunes en entornos de Big Data.
 # **Challenge 2 – Intermediate transformation, exploratory analysis (Silver) and Gold preparation 🔧📊**
 
 ## **Goal and step-by-step solution 🧭**
@@ -60,14 +48,14 @@ df_fin = spark.sql("SELECT * FROM Contoso_Lakehouse.bronze.credit_score")
 
 ---
 
-## **Derive `score_estimado` column based on payment behavior and credit usage 💳**
+## **Derive `estimated_credit_score` column based on payment behavior and credit usage 💳**
 
 ```python
 
 from pyspark.sql.functions import col, when, udf 
 from pyspark.sql.types import StringType 
 
-df_fin = df_fin.withColumn("score_estimado", 
+df_fin = df_fin.withColumn("estimated_credit_score", 
     when(col("Payment_Behaviour") == "High_spent_Small_value_payments", 650)
     .when(col("Payment_Behaviour") == "Low_spent_Large_value_payments", 750)
     .when(col("Payment_Behaviour") == "High_spent_Large_value_payments", 800)
@@ -80,8 +68,8 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Penalty for late payments ⏰**
 
 ```python
-df_fin = df_fin.withColumn("score_estimado", 
-    col("score_estimado") - (col("Num_of_Delayed_Payment") * 5)
+df_fin = df_fin.withColumn("estimated_credit_score", 
+    col("estimated_credit_score") - (col("Num_of_Delayed_Payment") * 5)
 )
 ```
 ---
@@ -89,9 +77,9 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Penalty for high credit utilization 📉**
 
 ```python
-df_fin = df_fin.withColumn("score_estimado", 
-    when(col("Credit_Utilization_Ratio") > 0.8, col("score_estimado") - 20)
-    .otherwise(col("score_estimado"))
+df_fin = df_fin.withColumn("estimated_credit_score", 
+    when(col("Credit_Utilization_Ratio") > 0.8, col("estimated_credit_score") - 20)
+    .otherwise(col("estimated_credit_score"))
 )
 ```
 ---
@@ -99,10 +87,10 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Limit score between 300 and 850 ⚙️**
 
 ```python
-df_fin = df_fin.withColumn("score_estimado", 
-    when(col("score_estimado") < 300, 300)
-    .when(col("score_estimado") > 850, 850)
-    .otherwise(col("score_estimado"))
+df_fin = df_fin.withColumn("estimated_credit_score", 
+    when(col("estimated_credit_score") < 300, 300)
+    .when(col("estimated_credit_score") > 850, 850)
+    .otherwise(col("estimated_credit_score"))
 )
 ```
 ---
@@ -110,7 +98,7 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Filter valid records for clustering 🧹**
 
 ```python
-df_fin_clean = df_fin.filter(col("score_estimado").isNotNull()) 
+df_fin_clean = df_fin.filter(col("estimated_credit_score").isNotNull()) 
 
 ```
  
@@ -165,10 +153,10 @@ df_fin = spark.sql("SELECT * FROM Contoso_Lakehouse.silver.credit_score")
 
 ---
 
-## **Vectorize `score_estimado` column for ML 🤖**
+## **Vectorize `estimated_credit_score` column for ML 🤖**
 
 ```python
-assembler = VectorAssembler(inputCols=["score_estimado"], outputCol="features") 
+assembler = VectorAssembler(inputCols=["estimated_credit_score"], outputCol="features") 
 df_fin_vec = assembler.transform(df_fin_clean) 
 ```
 
@@ -188,8 +176,8 @@ df_fin_clustered = model_fin.transform(df_fin_vec)
 
 ```python
 cluster_scores = df_fin_clustered.groupBy("prediction") \
-    .avg("score_estimado") \
-    .orderBy("avg(score_estimado)", ascending=False) \
+    .avg("estimated_credit_score") \
+    .orderBy("avg(estimated_credit_score)", ascending=False) \
     .collect()
 ```
 
@@ -200,7 +188,7 @@ cluster_scores = df_fin_clustered.groupBy("prediction") \
 ```python
 cluster_map = {} 
 for i, row in enumerate(cluster_scores): 
-    cluster_map[row["prediction"]] = ["Alto", "Medio", "Bajo"][i] 
+    cluster_map[row["prediction"]] = ["High", "Medium", "Low"][i] 
 ```
 
 ---
@@ -209,10 +197,10 @@ for i, row in enumerate(cluster_scores):
 
 ```python
 def map_cluster(pred): 
-    return cluster_map.get(pred, "Desconocido") 
+    return cluster_map.get(pred, "Unknown") 
 
 map_udf = udf(map_cluster, StringType()) 
-df_segmentado = df_fin_clustered.withColumn("perfil_crediticio", map_udf(col("prediction"))) 
+df_segmented = df_fin_clustered.withColumn("credit_profile", map_udf(col("prediction"))) 
 ```
 
 ---
@@ -220,7 +208,7 @@ df_segmentado = df_fin_clustered.withColumn("perfil_crediticio", map_udf(col("pr
 ## **Count customers by profile (optional for validation) 📊**
 
 ```python
-df_segmentado.groupBy("perfil_crediticio").count().orderBy("count", ascending=False).show() 
+df_segmented.groupBy("credit_profile").count().orderBy("count", ascending=False).show() 
 ```
 
 ---
@@ -229,9 +217,9 @@ df_segmentado.groupBy("perfil_crediticio").count().orderBy("count", ascending=Fa
 **NOTE**: This step can be adjusted to analyze all tiers or only high-profile customers
 
 ```python
-#df_gold_fin = df_segmentado.filter(col("perfil_crediticio") == "Alto") 
+#df_gold_fin = df_segmented.filter(col("credit_profile") == "High") 
 #display(df_gold_fin)
-df_gold_fin = df_segmentado
+df_gold_fin = df_segmented
 ```
 
 ---
@@ -285,15 +273,15 @@ from pyspark.sql.types import StringType
 ## **Load Silver table with retail product catalog 🧾**
 
 ```python
-df_retail = spark.read.table("productos_silver") 
+df_retail = spark.read.table("silver_products") 
 ```
 
 ---
 
-## **🧮 Derive `valor_comercial` = Price × Stock**
+## **🧮 Derive `inventory_value` = Price × Stock**
 
 ```python
-df_retail = df_retail.withColumn("valor_comercial", col("Price") * col("Stock")) 
+df_retail = df_retail.withColumn("inventory_value", col("Price") * col("Stock")) 
 ```
 
 ---
@@ -301,7 +289,7 @@ df_retail = df_retail.withColumn("valor_comercial", col("Price") * col("Stock"))
 ## **🧮 Derive binary availability column**
 
 ```python
-df_retail = df_retail.withColumn("disponible", 
+df_retail = df_retail.withColumn("available", 
     when(col("Availability") == "in_stock", 1).otherwise(0)
 )
 ```
@@ -312,7 +300,7 @@ df_retail = df_retail.withColumn("disponible",
 
 ```python
 df_retail_clean = df_retail.filter( 
-    col("valor_comercial").isNotNull() & col("disponible").isNotNull()
+    col("inventory_value").isNotNull() & col("available").isNotNull()
 )
 ```
 
@@ -355,7 +343,7 @@ from pyspark.ml.clustering import KMeans
 ## **📊 Vectorize columns for ML**
 
 ```python
-assembler = VectorAssembler(inputCols=["valor_comercial", "disponible"], outputCol="features") 
+assembler = VectorAssembler(inputCols=["inventory_value", "available"], outputCol="features") 
 df_retail_vec = assembler.transform(df_retail_clean) 
 ```
 
@@ -375,8 +363,8 @@ df_retail_clustered = model_retail.transform(df_retail_vec)
 
 ```python
 cluster_scores = df_retail_clustered.groupBy("prediction") \
-    .avg("valor_comercial") \
-    .orderBy("avg(valor_comercial)", ascending=False) \
+    .avg("inventory_value") \
+    .orderBy("avg(inventory_value)", ascending=False) \
     .collect()
 ```
 
@@ -387,7 +375,7 @@ cluster_scores = df_retail_clustered.groupBy("prediction") \
 ```python
 cluster_map = {} 
 for i, row in enumerate(cluster_scores): 
-    cluster_map[row["prediction"]] = ["Valioso", "Medio", "Bajo"][i] 
+    cluster_map[row["prediction"]] = ["Valuable", "Medium", "Low"][i] 
 ```
 
 ---
@@ -396,27 +384,27 @@ for i, row in enumerate(cluster_scores):
 
 ```python
 def map_cluster(pred): 
-    return cluster_map.get(pred, "Desconocido") 
+    return cluster_map.get(pred, "Unknown") 
 
 map_udf = udf(map_cluster, StringType()) 
-df_segmentado = df_retail_clustered.withColumn("perfil_producto", map_udf(col("prediction"))) 
+df_segmented = df_retail_clustered.withColumn("product_value_tier", map_udf(col("prediction"))) 
 ---
 
-## **🥇 Filtrar productos disponibles**
-**NOTA**: Este paso puede ajustarse si se desea analizar todos los tiers o solo los productos de perfil alto (valioso)
+## **🥇 Filter available products**
+**NOTE**: Adjust the filter to include all product value tiers or only the high-value tier.
 
 ```python
-#df_gold_retail = df_segmentado.filter(
-#    (col("perfil_producto") == "Valioso") & (col("disponible") == 1)
+#df_gold_retail = df_segmented.filter(
+#    (col("product_value_tier") == "Valioso") & (col("available") == 1)
 #)
 #display(df_gold_retail)
-df_gold_retail = df_segmentado.filter(
-    (col("disponible") == 1))
+df_gold_retail = df_segmented.filter(
+    (col("available") == 1))
 ```
 
 ---
 
-## **Eliminar columnas innecesarias de ML**
+## **Drop unnecessary ML helper columns**
 
 ```python
 drop_columns = ["features", "prediction"]
@@ -424,7 +412,7 @@ df_gold_retail = df_gold_retail.drop(*drop_columns)
 
 ```
 
-## **💾 Guardar tabla Gold con productos valiosos**
+## **💾 Save the Gold table of available products**
 
 ```python
 df_gold_retail.write.option("overwriteSchema", "true").mode("overwrite").saveAsTable("Contoso_Lakehouse.gold.products")
@@ -433,63 +421,64 @@ df_gold_retail.write.option("overwriteSchema", "true").mode("overwrite").saveAsT
 ---
 
 
-# **Preparacion + Promoción a Gold (Business Operations - Transacciones) 🛍️🤖**
+# **Preparation and promotion to the Gold layer (Business Operations — Transactions) 🛍️🤖**
 
 
-## **Solución paso a paso 🪜**
+## **Step-by-step solution 🪜**
 
-### **Set de transacciones🧩**  
-(Esto es un ejemplo de como trabajar el escenario de transactions, se puede hacer con otros enfoques)
+### **Transaction dataset🧩**  
+(This example demonstrates one approach to processing transaction data; other approaches are possible.)
 
-- Crear nuevo Dataflow Gen2 o Notebook para la capa Silver
-- Configurar el origen en las tablas Bronze.
-- Aplicar transformaciones intermedias 
-- Extracciones temporales basicas
-- Segmentacion simple de tickets
-- Flags de financiamento
-- Guardar en el Lakehouse como tabla una tabla silver
-- Se crea un nuevo Notebook para la capa Gold de score crediticio
-- Configurar el origen en las tablas Silver.
-- Se identifica el cluster con mayor promedio de score 
-- Se filtran los clientes pertenecientes a ese cluster
-- Se almacenan los datos en la capa Gold
-- Resultado: subconjunto de clientes con perfil crediticio alto 
+- Create a new Dataflow Gen2 or notebook for the Silver layer
+- Configure the Bronze tables as the data source
+- Apply intermediate transformations 
+- Extract basic date attributes
+- Segment transactions by transaction amount
+- Derive financing indicators
+- Save the results as a Silver table in the lakehouse
+- Create a new notebook for the Business Operations Gold layer
+- Load the Silver transaction and product tables
+- Left-join transactions to products using `product_id`
+- Select the required transaction attributes, product attributes, and derived fields
+- Save the result to the Gold layer
+- Result: an enriched transaction table for operational analysis
+
 
 ---
 
 
-# **CAPA SILVER - TRANSACTIONS**
+# **SILVER LAYER - TRANSACTIONS**
 
-# **Ejemplo -Creacion tablas silver - Transactions  🧮**
+# **Example — Create Silver tables for transactions 🧮**
 
 ---
 
-## **📌 Importar funciones necesarias**
+## **📌 Import required functions**
 
 ```python
 from pyspark.sql.functions import *
 ```
 ---
 
-## **Leer Bronze**
+## **Load Bronze transaction data**
 
 ```python
 df_transactions = spark.read.table("Contoso_Lakehouse.bronze.transactions")
 
-print(f"💳 Transactions en Bronze: {df_transactions.count():,}")
+print(f"💳 Transactions in Bronze: {df_transactions.count():,}")
 print("\n📋 Schema:")
 df_transactions.printSchema()
 ```
 ---
 
-## **Transformaciones Silver**
+## **Silver layer transformations**
 
 ```python
 df_transactions_enriched = (
     df_transactions
     
     # ============================================
-    # FEATURES TEMPORALES (solo lo esencial)
+    # DATE FEATURES (essential fields only)
     # ============================================
     .withColumn("year", year("transaction_date"))
     .withColumn("month", month("transaction_date"))
@@ -497,7 +486,7 @@ df_transactions_enriched = (
     .withColumn("year_month", date_format("transaction_date", "yyyy-MM"))
     
     # ============================================
-    # SEGMENTACIÓN SIMPLE
+    # TRANSACTION AMOUNT SEGMENTATION
     # ============================================
     .withColumn("ticket_segment", 
         when(col("amount") < 500, "Low")
@@ -506,7 +495,7 @@ df_transactions_enriched = (
     )
     
     # ============================================
-    # FLAGS DE FINANCIAMIENTO
+    # FINANCING INDICATORS
     # ============================================
     .withColumn("is_msi", col("installments") > 1)
     .withColumn("is_credit", col("payment_method") == "Credit")
@@ -515,7 +504,7 @@ df_transactions_enriched = (
     .filter(col("approval_status") == "Approved")
     
     # ============================================
-    # SELECCIÓN FINAL (campos esenciales)
+    # FINANCING INDICATORS
     # ============================================
     .select(
         # IDs
@@ -523,7 +512,7 @@ df_transactions_enriched = (
         "customer_id",
         "product_id",
         
-        # Transacción
+        # Transaction
         "transaction_date",
         "amount",
         "quantity",
@@ -532,13 +521,13 @@ df_transactions_enriched = (
         "channel",
         "store_location",
         
-        # Tiempo
+        # Time
         "year",
         "month",
         "quarter",
         "year_month",
         
-        # Segmentos
+        # Segments
         "ticket_segment",
         "is_msi",
         "is_credit"
@@ -547,22 +536,22 @@ df_transactions_enriched = (
 ```
 ---
 
-## **Validaciones de Calidad**
+## **Data quality checks**
 
 ```python
 total_transactions = df_transactions_enriched.count()
-print(f"✅ Total transacciones en Silver: {total_transactions:,}")
+print(f"✅ Total transactions in Silver: {total_transactions:,}")
 
 unique_customers = df_transactions_enriched.select("customer_id").distinct().count()
-print(f"👥 Clientes únicos: {unique_customers:,}")
+print(f"👥 Unique customers: {unique_customers:,}")
 
-print("\n💰 Distribución por Ticket Segment:")
+print("\n💰 Transaction counts by amount segment:")
 df_transactions_enriched.groupBy("ticket_segment").count().orderBy("ticket_segment").show()
 
 ```
 ---
 
-## **💾 Guardar tabla silver preparada**
+## **💾 Save the prepared Silver table**
 
 ```python
 df_transactions_enriched.write \
@@ -577,15 +566,14 @@ print(f"   Customers: {unique_customers:,}")
 
 ---
 
-# **CAPA GOLD - BUSINESS OPS**
-Este notebook crea una tabla Gold que combina:
-- Transacciones (silver.transactions)
-- Productos (silver.products)
+# **GOLD LAYER - BUSINESS OPERATIONS**
+This notebook creates a Gold table by combining:
+- Transactions (`silver.transactions`)
+- Products (`silver.products`)
 
-**Output**: `gold.business_operations` - Fact table para análisis operacional
+**Output**: `gold.business_operations` — a transaction-level fact table enriched with product attributes for operational analysis
 
-
-# **Ejemplo - Business Operations - Combinando transacciones + productos🧮**
+# **Example — Business Operations: Join transactions and products 🧮**
 
 ```python
 from pyspark.sql.functions import *
@@ -593,13 +581,13 @@ from pyspark.sql.functions import *
 
 ---
 
-## **Leer datos de Silver**
+## **Load Silver layer data**
 
 ```python
-# Transacciones enriquecidas
+# Enriched transactions
 df_transactions = spark.read.table("Contoso_Lakehouse.silver.transactions")
 
-# Productos enriquecidos
+# Enriched products
 df_products = spark.read.table("Contoso_Lakehouse.silver.products")
 
 print(f"Transactions: {df_transactions.count():,} registros")
@@ -608,14 +596,14 @@ print(f"Products: {df_products.count():,} registros")
 
 ---
 
-## **Crear tabla Gold**
+## **Create the Gold table**
 
 ```python
 
 df_business_operations = (
     df_transactions
     
-    # JOIN con productos
+    # JOIN with products
     .join(
         df_products.select(
             "product_id",
@@ -628,21 +616,21 @@ df_business_operations = (
         "left"
     )
     
-    # Selección final (solo campos necesarios)
+    # Final column selection (required fields only)
     .select(
         # IDs
         "transaction_id",
         "customer_id",
         "product_id",
         
-        # Producto
+        # Product
         "product_name",
         "brand", 
         "category",
         "price",
         
         
-        # Transacción
+        # Transaction
         "transaction_date",
         "amount",
         "quantity",
@@ -651,13 +639,13 @@ df_business_operations = (
         "channel",
         "store_location",
         
-        # Tiempo
+        # Time
         "year",
         "month",
         "quarter",
         "year_month",
         
-        # Segmentos
+        # Segment
         "ticket_segment",
         "is_msi",
         "is_credit"
@@ -668,24 +656,24 @@ df_business_operations = (
 
 ---
 
-## **Validaciones**
+## **Validation checks**
 
 ```python
 total_records = df_business_operations.count()
-print(f"✅ Total registros en Gold: {total_records:,}")
+print(f"✅ Total records en Gold: {total_records:,}")
 
-# Verificar nulls críticos
+# Check for nulls in critical fields
 null_checks = df_business_operations.select([
     count(when(col(c).isNull(), c)).alias(c) 
     for c in ["customer_id", "product_id", "amount", "transaction_date"]
 ])
-print("\n📊 Nulls en campos críticos:")
+print("\n📊 Nulls in critical fields:")
 null_checks.show()
 ```
 
 ---
 
-## **Guardar tabla Gold**
+## **Save the Gold table**
 
 ```python
 
@@ -694,18 +682,18 @@ df_business_operations.write \
     .option("overwriteSchema", "true") \
     .saveAsTable("Contoso_Lakehouse.gold.business_operations")
 
-print(f"✅ Tabla gold.business_operations creada exitosamente")
-print(f"   Registros: {total_records:,}")
+print(f"✅ Successfully created table gold.business_operations")
+print(f"   Records: {total_records:,}")
 
 ```
 
 ---
 
-## **Queries de Validación**
+## **Validation queries**
 
 ```python
-# Top 10 productos por revenue
-print("🏆 Top 10 Productos por Revenue:")
+# Top 10 products by revenue
+print("🏆 Top 10 Products by Revenue:")
 df_business_operations.groupBy("product_name", "category") \
     .agg(
         count("*").alias("units_sold"),
@@ -715,8 +703,8 @@ df_business_operations.groupBy("product_name", "category") \
     .limit(10) \
     .show(truncate=False)
 
-# Revenue por canal
-print("\n📺 Revenue por Canal:")
+# Revenue by channel
+print("\n📺 Revenue by Channel:")
 df_business_operations.groupBy("channel") \
     .agg(
         count("*").alias("transactions"),
@@ -728,5 +716,3 @@ df_business_operations.groupBy("channel") \
 ```
 
 ---
-
-
