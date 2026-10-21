@@ -110,8 +110,8 @@ After completing this challenge you will be able to:
 ## 🚀 Step 6: Publish and Enable the Agent
 💡 *Why?* Publishing the agent makes it accessible to analysts and business teams within the Fabric environment.
 
-1️⃣ Publish the agent from **AI Foundry**.
-2️⃣ (Optional) If you have admin permissions in your M365 tenant, enable it for use in **Microsoft 365 Copilot or Microsoft Teams**.
+1️⃣ Publish the agent from **AI Foundry**.  
+2️⃣ (Optional) If you have admin permissions in your M365 tenant, enable it for use in **Microsoft 365 Copilot or Microsoft Teams**.  
 3️⃣ Confirm the agent is published. You can test it in preview mode to see how it would appear in an application.
 
 ✅ **Expected result:** The agent is active and available for natural-language queries.
@@ -120,10 +120,10 @@ After completing this challenge you will be able to:
 
 ## 🏁 Final Checkpoints
 
-✅ Was the agent created and configured correctly in AI Foundry?
-✅ Is it connected to the Data Agent and Gold semantic model/tables?
-✅ Were intents and prompts defined to align with business needs?
-✅ Does the agent respond in natural language without showing code?
+✅ Was the agent created and configured correctly in AI Foundry?  
+✅ Is it connected to the Data Agent and Gold semantic model/tables?  
+✅ Were intents and prompts defined to align with business needs?  
+✅ Does the agent respond in natural language without showing code?  
 ✅ Is it published and available?
 
 ---

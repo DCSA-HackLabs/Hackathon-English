@@ -109,9 +109,9 @@ Before building dashboards and reports, validate with Power BI Copilot that the 
 
 2. Once enabled, ask questions in the chat pane. Here are some examples:
 
-💬 “Which category has the highest average price?”
-💬 “What is the total number of transactions?”
-💬 “Which product profile generates the most revenue?” (based on the derived measure)
+💬 “Which category has the highest average price?”  
+💬 “What is the total number of transactions?”  
+💬 “Which product profile generates the most revenue?” (based on the derived measure)  
 
 3. If any answer is incorrect, adjust the model measures or relationships.
 

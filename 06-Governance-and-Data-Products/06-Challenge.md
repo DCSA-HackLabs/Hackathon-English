@@ -58,7 +58,7 @@ In your Governance Domain → Business concepts → Data products:
 
 
 ## 🏁 Deliverables
-✅ Fabric tenant scanned (Lakehouse + tables visible in Data Map)
-✅ 3 glossary terms created
-✅ 1 Data Product published with 2+ assets and associated terms
+✅ Fabric tenant scanned (Lakehouse + tables visible in Data Map)  
+✅ 3 glossary terms created  
+✅ 1 Data Product published with 2+ assets and associated terms  
 ✅ Screenshot of data lineage

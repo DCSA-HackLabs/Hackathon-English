@@ -712,10 +712,10 @@ Scenario 1:
 
 Expected flow:
 
-✅ The Router Agent analyzes the query and emits `[SALES]`
-✅ The `[SALES]` condition evaluates to true, and the Sales Agent runs
-⏭️ The Market Research and Credit Risk agents are skipped
-⏭️ The Strategy Advisor is skipped (this is not a `[CROSS]` query)
+✅ The Router Agent analyzes the query and emits `[SALES]`  
+✅ The `[SALES]` condition evaluates to true, and the Sales Agent runs  
+⏭️ The Market Research and Credit Risk agents are skipped  
+⏭️ The Strategy Advisor is skipped (this is not a `[CROSS]` query)  
 ✅ The Sales Agent responds to the user
 
 ![New Foundry](/img/workflow11.png)
@@ -734,11 +734,11 @@ Scenario 2:
 
 Expected flow:
 
-✅ Router Agent → emits `[CROSS]`
-⏭️ No individual condition evaluates to true → execution proceeds to `elseActions`
-✅ Sales Agent runs (retrieves internal smartphone data)
-✅ Market Research runs (retrieves external market trends)
-✅ Credit Risk runs
+✅ Router Agent → emits `[CROSS]`  
+⏭️ No individual condition evaluates to true → execution proceeds to `elseActions`  
+✅ Sales Agent runs (retrieves internal smartphone data)  
+✅ Market Research runs (retrieves external market trends)  
+✅ Credit Risk runs  
 ✅ Strategy Advisor synthesizes the results and responds to the user
 
 ![New Foundry](/img/workflow12.png)
@@ -758,8 +758,8 @@ Scenario 3:
 Expected flow:
 
 ✅ Router Agent → emits `[CREDIT]`  
-✅ Condition `[CREDIT]` is true → Credit Risk Agent runs
-⏭️ Sales, Market Research, and Strategy Advisor are skipped
+✅ Condition `[CREDIT]` is true → Credit Risk Agent runs  
+⏭️ Sales, Market Research, and Strategy Advisor are skipped  
 ✅ Credit Risk Agent responds to the user
 
 ![New Foundry](/img/workflow13.png)
@@ -806,5 +806,3 @@ Group Chat is useful when:
 [Multi-Agent Orchestration Patterns](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/building-a-digital-workforce-with-multi-agents-in-azure-ai-foundry-agent-service/4414671)  
 [Agent Framework Examples](https://github.com/microsoft/agent-framework)  
 [Building No-Code Agentic Workflows with Microsoft Foundry](https://medium.com/data-science-collective/building-no-code-agentic-workflows-with-microsoft-foundry-52ad377ad644)  
-
-
