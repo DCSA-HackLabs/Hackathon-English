@@ -1,3 +1,17 @@
+
+# **Challenge 2 – Intermediate transformation, exploratory analysis (Silver) and Gold Preparation 🔧📊**
+
+## **Goal and step-by-step solution 🧭**
+
+### **Goal 🎯**
+Transform Bronze data, perform exploratory analysis in Silver, and finally build the Gold layer. 
+
+---
+
+## **Step-by-step solution 🪜**
+
+In this approach, three data products were selected: **Credit Scores** medallion + customer segmentation with ML (KMeans), **Products** - medallion + product segmentation by commercial value with ML (KMeans), and **Business Operations**, which combines transactions and products tables to model an operational analysis of customer and product purchases. The exercise is not intended to enforce strict dimensional modeling; instead, it encourages working with different approaches. Fabric as a tool adapts to dimensional modeling approaches as well as denormalization approaches common in Big Data environments.
+
 # **Challenge 2 – Intermediate transformation, exploratory analysis (Silver) and Gold preparation 🔧📊**
 
 ## **Goal and step-by-step solution 🧭**
@@ -391,7 +405,7 @@ df_segmented = df_retail_clustered.withColumn("product_value_tier", map_udf(col(
 ---
 
 ## **🥇 Filter available products**
-**NOTE**: Adjust the filter to include all product value tiers or only the high-value tier.
+**NOTE**: This step can be adjusted if you want to analyze all tiers or only high-profile (valuable) products
 
 ```python
 #df_gold_retail = df_segmented.filter(
@@ -404,7 +418,7 @@ df_gold_retail = df_segmented.filter(
 
 ---
 
-## **Drop unnecessary ML helper columns**
+## **Remove unnecessary ML columns**
 
 ```python
 drop_columns = ["features", "prediction"]
@@ -412,7 +426,7 @@ df_gold_retail = df_gold_retail.drop(*drop_columns)
 
 ```
 
-## **💾 Save the Gold table of available products**
+## **💾 Save Gold table with valuable products**
 
 ```python
 df_gold_retail.write.option("overwriteSchema", "true").mode("overwrite").saveAsTable("Contoso_Lakehouse.gold.products")
@@ -421,35 +435,34 @@ df_gold_retail.write.option("overwriteSchema", "true").mode("overwrite").saveAsT
 ---
 
 
-# **Preparation and promotion to the Gold layer (Business Operations — Transactions) 🛍️🤖**
+# **Preparation + Promotion to Gold (Business Operations - Transactions) 🛍️🤖**
 
 
 ## **Step-by-step solution 🪜**
 
-### **Transaction dataset🧩**  
-(This example demonstrates one approach to processing transaction data; other approaches are possible.)
+### **Transaction set🧩**  
+(This is an example of how to work with the transactions scenario; it can be done using other approaches)
 
-- Create a new Dataflow Gen2 or notebook for the Silver layer
-- Configure the Bronze tables as the data source
+- Create a new Dataflow Gen2 or Notebook for the Silver layer
+- Configure the source in the Bronze tables.
 - Apply intermediate transformations 
-- Extract basic date attributes
-- Segment transactions by transaction amount
-- Derive financing indicators
-- Save the results as a Silver table in the lakehouse
-- Create a new notebook for the Business Operations Gold layer
-- Load the Silver transaction and product tables
-- Left-join transactions to products using `product_id`
-- Select the required transaction attributes, product attributes, and derived fields
-- Save the result to the Gold layer
-- Result: an enriched transaction table for operational analysis
-
+- Basic time-based extractions
+- Simple ticket segmentation
+- Financing flags
+- Save in the Lakehouse as a Silver table
+- Create a new Notebook for the Gold credit score layer
+- Configure the source in the Silver tables.
+- Identify the cluster with the highest average score 
+- Filter the customers belonging to that cluster
+- Store the data in the Gold layer
+- Result: subset of customers with a high credit profile 
 
 ---
 
 
 # **SILVER LAYER - TRANSACTIONS**
 
-# **Example — Create Silver tables for transactions 🧮**
+# **Example - Creation of Silver tables - Transactions  🧮**
 
 ---
 
@@ -460,7 +473,7 @@ from pyspark.sql.functions import *
 ```
 ---
 
-## **Load Bronze transaction data**
+## **Read Bronze**
 
 ```python
 df_transactions = spark.read.table("Contoso_Lakehouse.bronze.transactions")
@@ -471,14 +484,14 @@ df_transactions.printSchema()
 ```
 ---
 
-## **Silver layer transformations**
+## **Silver transformations**
 
 ```python
 df_transactions_enriched = (
     df_transactions
     
     # ============================================
-    # DATE FEATURES (essential fields only)
+    # TIME FEATURES (only the essentials)
     # ============================================
     .withColumn("year", year("transaction_date"))
     .withColumn("month", month("transaction_date"))
@@ -486,7 +499,7 @@ df_transactions_enriched = (
     .withColumn("year_month", date_format("transaction_date", "yyyy-MM"))
     
     # ============================================
-    # TRANSACTION AMOUNT SEGMENTATION
+    # SIMPLE SEGMENTATION
     # ============================================
     .withColumn("ticket_segment", 
         when(col("amount") < 500, "Low")
@@ -495,16 +508,16 @@ df_transactions_enriched = (
     )
     
     # ============================================
-    # FINANCING INDICATORS
+    # FINANCING FLAGS
     # ============================================
     .withColumn("is_msi", col("installments") > 1)
     .withColumn("is_credit", col("payment_method") == "Credit")
     
-    # Solo transacciones aprobadas
+    # Only approved transactions
     .filter(col("approval_status") == "Approved")
     
     # ============================================
-    # FINANCING INDICATORS
+    # FINAL SELECTION (essential fields)
     # ============================================
     .select(
         # IDs
@@ -536,7 +549,7 @@ df_transactions_enriched = (
 ```
 ---
 
-## **Data quality checks**
+## **Quality Validations**
 
 ```python
 total_transactions = df_transactions_enriched.count()
@@ -545,13 +558,13 @@ print(f"✅ Total transactions in Silver: {total_transactions:,}")
 unique_customers = df_transactions_enriched.select("customer_id").distinct().count()
 print(f"👥 Unique customers: {unique_customers:,}")
 
-print("\n💰 Transaction counts by amount segment:")
+print("\n💰 Distribution by Ticket Segment:")
 df_transactions_enriched.groupBy("ticket_segment").count().orderBy("ticket_segment").show()
 
 ```
 ---
 
-## **💾 Save the prepared Silver table**
+## **💾 Save prepared Silver table**
 
 ```python
 df_transactions_enriched.write \
@@ -566,14 +579,15 @@ print(f"   Customers: {unique_customers:,}")
 
 ---
 
-# **GOLD LAYER - BUSINESS OPERATIONS**
-This notebook creates a Gold table by combining:
-- Transactions (`silver.transactions`)
-- Products (`silver.products`)
+# **GOLD LAYER - BUSINESS OPS**
+This notebook creates a Gold table that combines:
+- Transactions (silver.transactions)
+- Products (silver.products)
 
-**Output**: `gold.business_operations` — a transaction-level fact table enriched with product attributes for operational analysis
+**Output**: `gold.business_operations` - Fact table for operational analysis
 
-# **Example — Business Operations: Join transactions and products 🧮**
+
+# **Example - Business Operations - Combining transactions + products🧮**
 
 ```python
 from pyspark.sql.functions import *
@@ -581,7 +595,7 @@ from pyspark.sql.functions import *
 
 ---
 
-## **Load Silver layer data**
+## **Read Silver data**
 
 ```python
 # Enriched transactions
@@ -590,13 +604,13 @@ df_transactions = spark.read.table("Contoso_Lakehouse.silver.transactions")
 # Enriched products
 df_products = spark.read.table("Contoso_Lakehouse.silver.products")
 
-print(f"Transactions: {df_transactions.count():,} registros")
-print(f"Products: {df_products.count():,} registros")
+print(f"Transactions: {df_transactions.count():,} records")
+print(f"Products: {df_products.count():,} records")
 ```
 
 ---
 
-## **Create the Gold table**
+## **Create Gold table**
 
 ```python
 
@@ -616,7 +630,7 @@ df_business_operations = (
         "left"
     )
     
-    # Final column selection (required fields only)
+    # Final selection (only required fields)
     .select(
         # IDs
         "transaction_id",
@@ -645,7 +659,7 @@ df_business_operations = (
         "quarter",
         "year_month",
         
-        # Segment
+        # Segments
         "ticket_segment",
         "is_msi",
         "is_credit"
@@ -656,13 +670,13 @@ df_business_operations = (
 
 ---
 
-## **Validation checks**
+## **Validations**
 
 ```python
 total_records = df_business_operations.count()
-print(f"✅ Total records en Gold: {total_records:,}")
+print(f"✅ Total records in Gold: {total_records:,}")
 
-# Check for nulls in critical fields
+# Check critical nulls
 null_checks = df_business_operations.select([
     count(when(col(c).isNull(), c)).alias(c) 
     for c in ["customer_id", "product_id", "amount", "transaction_date"]
@@ -673,7 +687,7 @@ null_checks.show()
 
 ---
 
-## **Save the Gold table**
+## **Save Gold table**
 
 ```python
 
@@ -682,14 +696,14 @@ df_business_operations.write \
     .option("overwriteSchema", "true") \
     .saveAsTable("Contoso_Lakehouse.gold.business_operations")
 
-print(f"✅ Successfully created table gold.business_operations")
+print(f"✅ gold.business_operations table created successfully")
 print(f"   Records: {total_records:,}")
 
 ```
 
 ---
 
-## **Validation queries**
+## **Validation Queries**
 
 ```python
 # Top 10 products by revenue
@@ -715,4 +729,5 @@ df_business_operations.groupBy("channel") \
     .show()
 ```
 
----
+
+
