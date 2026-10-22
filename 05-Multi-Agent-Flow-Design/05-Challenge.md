@@ -13,10 +13,10 @@ In production scenarios these flows may involve not only analysis but also actio
 ### 🎯 Your Mission
 Upon completion you will be able to:
 
-✅ Define **four specialized agents** with clear responsibilities (Sales, Credit, Market Research, Synthesizer) plus an **orchestrator (Router)** agent that directs the flow intelligently.
-✅ Design a collaborative **orchestrated flow** using Foundry Workflows with conditional branches and error handling.
-✅ Integrate internal data sources **(Microsoft Fabric)** with external tools (e.g., **Bing Search**).
-✅ Validate complex business scenarios that require synthesis across multiple domains.
+✅ Define **four specialized agents** with clear responsibilities (Sales, Credit, Market Research, Synthesizer) plus an **orchestrator (Router)** agent that directs the flow intelligently.  
+✅ Design a collaborative **orchestrated flow** using Foundry Workflows with conditional branches and error handling.  
+✅ Integrate internal data sources **(Microsoft Fabric)** with external tools (e.g., **Bing Search**).  
+✅ Validate complex business scenarios that require synthesis across multiple domains.  
 ✅ Document the design for **replicability and scalability**.
 
 ---
@@ -141,8 +141,8 @@ Foundry Workflows
 
 **Flow Architecture**
 
-1️⃣ Trigger: User query via Playground
-2️⃣ **Router Agent**: analyze the query and emit **one tag** — `[SALES]`, `[MARKET]`, `[CREDIT]`, or `[CROSS]`
+1️⃣ Trigger: User query via Playground  
+2️⃣ **Router Agent**: analyze the query and emit **one tag** — `[SALES]`, `[MARKET]`, `[CREDIT]`, or `[CROSS]`  
 3️⃣ Conditional routing:
 
 ![Multi](/img/multi-flujo.png)
@@ -315,13 +315,13 @@ Documentation items
 
 ### 🏁 Final Checkpoints
 
-✅ Are the 5 agents defined (Router + 3 specialized + Advisor) with clear roles and responsibilities?
-✅ Does the Router Agent emit correct tags for different query types?
-✅ Does the flow activate only the agents needed per query type?
-✅ Is the Strategy Advisor invoked only when 2 or more agents participated?
-✅ Are the 3 specialized agents configured in Foundry with appropriate tools?
-✅ Is the workflow built visually in Foundry Workflows?
-✅ Were the 3 business scenarios tested successfully?
+✅ Are the 5 agents defined (Router + 3 specialized + Advisor) with clear roles and responsibilities?  
+✅ Does the Router Agent emit correct tags for different query types?  
+✅ Does the flow activate only the agents needed per query type?  
+✅ Is the Strategy Advisor invoked only when 2 or more agents participated?  
+✅ Are the 3 specialized agents configured in Foundry with appropriate tools?  
+✅ Is the workflow built visually in Foundry Workflows?  
+✅ Were the 3 business scenarios tested successfully?  
 ✅ Does the documentation include diagrams, configurations and results?
 
 ---

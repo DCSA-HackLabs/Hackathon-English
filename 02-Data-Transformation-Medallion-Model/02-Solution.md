@@ -62,14 +62,14 @@ df_fin = spark.sql("SELECT * FROM Contoso_Lakehouse.bronze.credit_score")
 
 ---
 
-## **Derive `score_estimado` column based on payment behavior and credit usage 💳**
+## **Derive `estimated_credit_score` column based on payment behavior and credit usage 💳**
 
 ```python
 
 from pyspark.sql.functions import col, when, udf 
 from pyspark.sql.types import StringType 
 
-df_fin = df_fin.withColumn("score_estimado", 
+df_fin = df_fin.withColumn("estimated_credit_score", 
     when(col("Payment_Behaviour") == "High_spent_Small_value_payments", 650)
     .when(col("Payment_Behaviour") == "Low_spent_Large_value_payments", 750)
     .when(col("Payment_Behaviour") == "High_spent_Large_value_payments", 800)
@@ -82,8 +82,8 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Penalty for late payments ⏰**
 
 ```python
-df_fin = df_fin.withColumn("score_estimado", 
-    col("score_estimado") - (col("Num_of_Delayed_Payment") * 5)
+df_fin = df_fin.withColumn("estimated_credit_score", 
+    col("estimated_credit_score") - (col("Num_of_Delayed_Payment") * 5)
 )
 ```
 ---
@@ -91,9 +91,9 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Penalty for high credit utilization 📉**
 
 ```python
-df_fin = df_fin.withColumn("score_estimado", 
-    when(col("Credit_Utilization_Ratio") > 0.8, col("score_estimado") - 20)
-    .otherwise(col("score_estimado"))
+df_fin = df_fin.withColumn("estimated_credit_score", 
+    when(col("Credit_Utilization_Ratio") > 0.8, col("estimated_credit_score") - 20)
+    .otherwise(col("estimated_credit_score"))
 )
 ```
 ---
@@ -101,10 +101,10 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Limit score between 300 and 850 ⚙️**
 
 ```python
-df_fin = df_fin.withColumn("score_estimado", 
-    when(col("score_estimado") < 300, 300)
-    .when(col("score_estimado") > 850, 850)
-    .otherwise(col("score_estimado"))
+df_fin = df_fin.withColumn("estimated_credit_score", 
+    when(col("estimated_credit_score") < 300, 300)
+    .when(col("estimated_credit_score") > 850, 850)
+    .otherwise(col("estimated_credit_score"))
 )
 ```
 ---
@@ -112,7 +112,7 @@ df_fin = df_fin.withColumn("score_estimado",
 ## **Filter valid records for clustering 🧹**
 
 ```python
-df_fin_clean = df_fin.filter(col("score_estimado").isNotNull()) 
+df_fin_clean = df_fin.filter(col("estimated_credit_score").isNotNull()) 
 
 ```
  
@@ -167,10 +167,10 @@ df_fin = spark.sql("SELECT * FROM Contoso_Lakehouse.silver.credit_score")
 
 ---
 
-## **Vectorize `score_estimado` column for ML 🤖**
+## **Vectorize `estimated_credit_score` column for ML 🤖**
 
 ```python
-assembler = VectorAssembler(inputCols=["score_estimado"], outputCol="features") 
+assembler = VectorAssembler(inputCols=["estimated_credit_score"], outputCol="features") 
 df_fin_vec = assembler.transform(df_fin_clean) 
 ```
 
@@ -190,8 +190,8 @@ df_fin_clustered = model_fin.transform(df_fin_vec)
 
 ```python
 cluster_scores = df_fin_clustered.groupBy("prediction") \
-    .avg("score_estimado") \
-    .orderBy("avg(score_estimado)", ascending=False) \
+    .avg("estimated_credit_score") \
+    .orderBy("avg(estimated_credit_score)", ascending=False) \
     .collect()
 ```
 
@@ -202,7 +202,7 @@ cluster_scores = df_fin_clustered.groupBy("prediction") \
 ```python
 cluster_map = {} 
 for i, row in enumerate(cluster_scores): 
-    cluster_map[row["prediction"]] = ["Alto", "Medio", "Bajo"][i] 
+    cluster_map[row["prediction"]] = ["High", "Medium", "Low"][i] 
 ```
 
 ---
@@ -211,10 +211,10 @@ for i, row in enumerate(cluster_scores):
 
 ```python
 def map_cluster(pred): 
-    return cluster_map.get(pred, "Desconocido") 
+    return cluster_map.get(pred, "Unknown") 
 
 map_udf = udf(map_cluster, StringType()) 
-df_segmentado = df_fin_clustered.withColumn("perfil_crediticio", map_udf(col("prediction"))) 
+df_segmented = df_fin_clustered.withColumn("credit_profile", map_udf(col("prediction"))) 
 ```
 
 ---
@@ -222,7 +222,7 @@ df_segmentado = df_fin_clustered.withColumn("perfil_crediticio", map_udf(col("pr
 ## **Count customers by profile (optional for validation) 📊**
 
 ```python
-df_segmentado.groupBy("perfil_crediticio").count().orderBy("count", ascending=False).show() 
+df_segmented.groupBy("credit_profile").count().orderBy("count", ascending=False).show() 
 ```
 
 ---
@@ -231,9 +231,9 @@ df_segmentado.groupBy("perfil_crediticio").count().orderBy("count", ascending=Fa
 **NOTE**: This step can be adjusted to analyze all tiers or only high-profile customers
 
 ```python
-#df_gold_fin = df_segmentado.filter(col("perfil_crediticio") == "Alto") 
+#df_gold_fin = df_segmented.filter(col("credit_profile") == "High") 
 #display(df_gold_fin)
-df_gold_fin = df_segmentado
+df_gold_fin = df_segmented
 ```
 
 ---
@@ -287,15 +287,15 @@ from pyspark.sql.types import StringType
 ## **Load Silver table with retail product catalog 🧾**
 
 ```python
-df_retail = spark.read.table("productos_silver") 
+df_retail = spark.read.table("silver_products") 
 ```
 
 ---
 
-## **🧮 Derive `valor_comercial` = Price × Stock**
+## **🧮 Derive `inventory_value` = Price × Stock**
 
 ```python
-df_retail = df_retail.withColumn("valor_comercial", col("Price") * col("Stock")) 
+df_retail = df_retail.withColumn("inventory_value", col("Price") * col("Stock")) 
 ```
 
 ---
@@ -303,7 +303,7 @@ df_retail = df_retail.withColumn("valor_comercial", col("Price") * col("Stock"))
 ## **🧮 Derive binary availability column**
 
 ```python
-df_retail = df_retail.withColumn("disponible", 
+df_retail = df_retail.withColumn("available", 
     when(col("Availability") == "in_stock", 1).otherwise(0)
 )
 ```
@@ -314,7 +314,7 @@ df_retail = df_retail.withColumn("disponible",
 
 ```python
 df_retail_clean = df_retail.filter( 
-    col("valor_comercial").isNotNull() & col("disponible").isNotNull()
+    col("inventory_value").isNotNull() & col("available").isNotNull()
 )
 ```
 
@@ -357,7 +357,7 @@ from pyspark.ml.clustering import KMeans
 ## **📊 Vectorize columns for ML**
 
 ```python
-assembler = VectorAssembler(inputCols=["valor_comercial", "disponible"], outputCol="features") 
+assembler = VectorAssembler(inputCols=["inventory_value", "available"], outputCol="features") 
 df_retail_vec = assembler.transform(df_retail_clean) 
 ```
 
@@ -377,8 +377,8 @@ df_retail_clustered = model_retail.transform(df_retail_vec)
 
 ```python
 cluster_scores = df_retail_clustered.groupBy("prediction") \
-    .avg("valor_comercial") \
-    .orderBy("avg(valor_comercial)", ascending=False) \
+    .avg("inventory_value") \
+    .orderBy("avg(inventory_value)", ascending=False) \
     .collect()
 ```
 
@@ -389,7 +389,7 @@ cluster_scores = df_retail_clustered.groupBy("prediction") \
 ```python
 cluster_map = {} 
 for i, row in enumerate(cluster_scores): 
-    cluster_map[row["prediction"]] = ["Valioso", "Medio", "Bajo"][i] 
+    cluster_map[row["prediction"]] = ["Valuable", "Medium", "Low"][i] 
 ```
 
 ---
@@ -398,22 +398,22 @@ for i, row in enumerate(cluster_scores):
 
 ```python
 def map_cluster(pred): 
-    return cluster_map.get(pred, "Desconocido") 
+    return cluster_map.get(pred, "Unknown") 
 
 map_udf = udf(map_cluster, StringType()) 
-df_segmentado = df_retail_clustered.withColumn("perfil_producto", map_udf(col("prediction"))) 
+df_segmented = df_retail_clustered.withColumn("product_value_tier", map_udf(col("prediction"))) 
 ---
 
 ## **🥇 Filter available products**
 **NOTE**: This step can be adjusted if you want to analyze all tiers or only high-profile (valuable) products
 
 ```python
-#df_gold_retail = df_segmentado.filter(
-#    (col("perfil_producto") == "Valioso") & (col("disponible") == 1)
+#df_gold_retail = df_segmented.filter(
+#    (col("product_value_tier") == "Valioso") & (col("available") == 1)
 #)
 #display(df_gold_retail)
-df_gold_retail = df_segmentado.filter(
-    (col("disponible") == 1))
+df_gold_retail = df_segmented.filter(
+    (col("available") == 1))
 ```
 
 ---
