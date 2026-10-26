@@ -23,20 +23,6 @@
       "metadata": {
         "description": "Location for all resources."
       }
-    },
-    "sqlAdminUser": {
-      "type": "string",
-      "defaultValue": "sqladmin",
-      "metadata": {
-        "description": "SQL Server admin user."
-      }
-    },
-    "sqlAdminPassword": {
-      "type": "securestring",
-      "minLength": 12,
-      "metadata": {
-        "description": "SQL Server admin password (minimum 12 characters, including uppercase, lowercase, numbers, and symbols)."
-      }
     }
   },
   "variables": {
@@ -98,15 +84,15 @@
     {
       "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
       "apiVersion": "2023-04-15",
-      "name": "[concat(variables('cosmosAccountName'), '/FabricChallengeDB/Customers')]",
+      "name": "[concat(variables('cosmosAccountName'), '/FabricChallengeDB/creditScore')]",
       "dependsOn": [
         "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosAccountName'), 'FabricChallengeDB')]"
       ],
       "properties": {
         "resource": {
-          "id": "Customers",
+          "id": "creditScore",
           "partitionKey": {
-            "paths": ["/customerId"],
+            "paths": ["/id"],
             "kind": "Hash"
           }
         }
@@ -115,15 +101,15 @@
     {
       "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
       "apiVersion": "2023-04-15",
-      "name": "[concat(variables('cosmosAccountName'), '/FabricChallengeDB/Transactions')]",
+      "name": "[concat(variables('cosmosAccountName'), '/FabricChallengeDB/transactions')]",
       "dependsOn": [
         "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosAccountName'), 'FabricChallengeDB')]"
       ],
       "properties": {
         "resource": {
-          "id": "Transactions",
+          "id": "transactions",
           "partitionKey": {
-            "paths": ["/transactionId"],
+            "paths": ["/id"],
             "kind": "Hash"
           }
         }
@@ -132,79 +118,18 @@
     {
       "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
       "apiVersion": "2023-04-15",
-      "name": "[concat(variables('cosmosAccountName'), '/FabricChallengeDB/Products')]",
+      "name": "[concat(variables('cosmosAccountName'), '/FabricChallengeDB/products')]",
       "dependsOn": [
         "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosAccountName'), 'FabricChallengeDB')]"
       ],
       "properties": {
         "resource": {
-          "id": "Products",
+          "id": "products",
           "partitionKey": {
-            "paths": ["/productId"],
+            "paths": ["/id"],
             "kind": "Hash"
           }
         }
-      }
-    },
-    {
-      "type": "Microsoft.Sql/servers",
-      "apiVersion": "2023-05-01-preview",
-      "name": "[variables('sqlServerName')]",
-      "location": "[parameters('location')]",
-      "tags": "[variables('commonTags')]",
-      "properties": {
-        "administratorLogin": "[parameters('sqlAdminUser')]",
-        "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
-        "version": "12.0",
-        "minimalTlsVersion": "1.2",
-        "publicNetworkAccess": "Enabled"
-      }
-    },
-    {
-      "type": "Microsoft.Sql/servers/firewallRules",
-      "apiVersion": "2023-05-01-preview",
-      "name": "[concat(variables('sqlServerName'), '/AllowAzureServices')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ],
-      "properties": {
-        "startIpAddress": "0.0.0.0",
-        "endIpAddress": "0.0.0.0"
-      }
-    },
-    {
-      "type": "Microsoft.Sql/servers/firewallRules",
-      "apiVersion": "2023-05-01-preview",
-      "name": "[concat(variables('sqlServerName'), '/AllowAllForEvent')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ],
-      "properties": {
-        "startIpAddress": "0.0.0.0",
-        "endIpAddress": "255.255.255.255"
-      }
-    },
-    {
-      "type": "Microsoft.Sql/servers/databases",
-      "apiVersion": "2023-05-01-preview",
-      "name": "[concat(variables('sqlServerName'), '/', variables('sqlDatabaseName'))]",
-      "location": "[parameters('location')]",
-      "tags": "[variables('commonTags')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ],
-      "sku": {
-        "name": "Basic",
-        "tier": "Basic",
-        "capacity": 5
-      },
-      "properties": {
-        "collation": "SQL_Latin1_General_CP1_CI_AS",
-        "maxSizeBytes": 2147483648,
-        "sampleName": "AdventureWorksLT",
-        "zoneRedundant": false,
-        "readScale": "Disabled",
-        "requestedBackupStorageRedundancy": "Local"
       }
     },
     {
@@ -316,18 +241,6 @@
     "cosmosDbEndpoint": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))).documentEndpoint]"
-    },
-    "sqlServerName": {
-      "type": "string",
-      "value": "[variables('sqlServerName')]"
-    },
-    "sqlServerFqdn": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.Sql/servers', variables('sqlServerName'))).fullyQualifiedDomainName]"
-    },
-    "sqlDatabaseName": {
-      "type": "string",
-      "value": "[variables('sqlDatabaseName')]"
     },
     "storageAccountName": {
       "type": "string",
