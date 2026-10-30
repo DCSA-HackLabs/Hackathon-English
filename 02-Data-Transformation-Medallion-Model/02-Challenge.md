@@ -1,7 +1,7 @@
 
 # 🏆 Challenge 2: Intermediate Transformation and Exploratory Analysis in Microsoft Fabric (Silver Layer)
 
-📖 Scenario
+📖 Scenario  
 Contoso aims to **assess data quality** before building predictive and analytical models.
 The data team must **transform and analyze data** coming from the **Bronze** layer to produce a refined intermediate version in the **Silver** layer.
 
@@ -36,6 +36,7 @@ To complete this challenge you should:
 2️⃣ Apply transformations that add analytical value, for example:  
    - 📊 **Aggregations:** Identify the **highest credit score per customer**.
    - 🏷️ **Product profiles:** Classify products by category or sales level.
+
 3️⃣ Create new columns or metrics for downstream analysis (e.g., average purchase amount, risk levels).
 
 ✅ **Expected result:** Silver tables contain useful transformations ready for exploratory analysis, modeling or segmentation.
@@ -51,6 +52,7 @@ For Credit Score and Products:
 2️⃣ Implement a **K-Means** algorithm (or another clustering approach):  
    - 🎯 Cluster customers or products by similar numeric features.
    - 🔍 Analyze variable relationships within each cluster.
+
 3️⃣ Persist the final table versions to the **Lakehouse [Silver]**.
 
 ✅ **Expected result:** A segmentation of your customer data and deeper understanding of behavior. If you skip ML, develop an alternate analysis that reveals new insights.
