@@ -272,6 +272,13 @@ df_gold_fin.write.option("mergeSchema", "true").mode("overwrite").saveAsTable("C
 
 # **Example – Create Silver tables - Retail 🧮**
 
+## **Load Bronze table with products data 🧾**
+
+```python
+
+df_retail = spark.sql("SELECT * FROM Contoso_Lakehouse.bronze.products") 
+```
+
 ---
 
 ## **📌 Import required functions**
@@ -280,14 +287,6 @@ df_gold_fin.write.option("mergeSchema", "true").mode("overwrite").saveAsTable("C
 from pyspark.sql.functions import col, when, udf 
 from pyspark.sql.types import StringType 
 
-```
-
----
-
-## **Load Silver table with retail product catalog 🧾**
-
-```python
-df_retail = spark.read.table("silver_products") 
 ```
 
 ---
@@ -323,7 +322,7 @@ df_retail_clean = df_retail.filter(
 ## **Normalize column names to lower case**
 
 ```python
-df_fin_clean = df_fin_clean .toDF(*[c.lower() for c in df_fin_clean.columns])
+df_retail_clean = df_retail_clean .toDF(*[c.lower() for c in df_fin_clean.columns])
 ```
 ---
 
@@ -402,6 +401,8 @@ def map_cluster(pred):
 
 map_udf = udf(map_cluster, StringType()) 
 df_segmented = df_retail_clustered.withColumn("product_value_tier", map_udf(col("prediction"))) 
+```
+
 ---
 
 ## **🥇 Filter available products**
