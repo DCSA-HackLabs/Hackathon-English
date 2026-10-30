@@ -1,6 +1,6 @@
 # 🏆 Challenge 3: Semantic Model, Data Agent and Value Dashboard in Microsoft Fabric (Gold Layer)
 
-📖 Scenario
+📖 Scenario  
 Contoso aims to **enable business analysis on trusted data**.
 
 The data team should build a **semantic model**, create a **Data Agent connected to the model**, and design a **value dashboard** in Power BI to answer key business questions.
