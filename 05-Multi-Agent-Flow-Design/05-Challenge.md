@@ -1,6 +1,6 @@
 # 🏆 Challenge 5: Agent Orchestration - Multi-Agent Flow Design
 
-📖 Scenario
+### 📖 Scenario
 
 In the context of AI applied to business process automation, agent orchestration enables scalable decision-making through collaboration among role-specialized agents. Contoso, a retail and financial company, needs to combine multiple information sources to make informed strategic decisions.
 

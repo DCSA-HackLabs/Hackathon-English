@@ -1,7 +1,8 @@
 
 # 🏆 Challenge 2: Intermediate Transformation and Exploratory Analysis in Microsoft Fabric (Silver Layer)
 
-📖 Scenario  
+### 📖 Scenario
+
 Contoso aims to **assess data quality** before building predictive and analytical models.
 The data team must **transform and analyze data** coming from the **Bronze** layer to produce a refined intermediate version in the **Silver** layer.
 

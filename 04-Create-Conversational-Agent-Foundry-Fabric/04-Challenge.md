@@ -1,7 +1,7 @@
 
 # 🏆 Challenge 4: Create a Conversational Agent in AI Foundry with Microsoft Fabric Integration 🤖
 
-📖 Scenario
+📖 Scenario  
 Contoso wants its **analysts to interact with data using natural language**, without requiring technical knowledge of T-SQL or data modeling.
 The goal is to create an **agent in Azure AI Foundry** that consumes the **semantic model connected to Fabric via a Data Agent**, enabling clear, understandable responses based on trusted data.
 

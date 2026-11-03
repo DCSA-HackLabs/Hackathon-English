@@ -1,8 +1,10 @@
 
 # 🏆 Challenge 1: Data Ingestion from Cosmos DB to Microsoft Fabric (Bronze Layer) + Basic Cleaning
 
-📖 Scenario
+### 📖 Scenario
+
 Contoso needs to consolidate its **operational and financial data** in **Microsoft Fabric**.
+
 The data team must perform **ingestion from Azure Cosmos DB** into the **Bronze** layer and apply a minimal initial **cleaning** to prepare data before advancing to subsequent transformation phases.
 
 ---
