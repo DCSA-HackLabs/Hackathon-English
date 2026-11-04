@@ -82,8 +82,27 @@ trigger:
             - kind: EndConversation
               id: end_credit
       elseActions:
+        # [CROSS]: reset the input to the user's question before EVERY agent.
+        # Otherwise each agent receives the previous agent's answer as its prompt,
+        # which can send internal sales figures into Market Research's web searches.
+        # Market Research runs first so no internal data is in the shared conversation yet.
+        # The Strategy Advisor reads the other agents' answers from the conversation history.
         - kind: SetVariable
           id: restore_all
+          variable: Local.LatestMessage
+          value: =UserMessage(Local.UserQuestion)
+        - kind: InvokeAzureAgent
+          id: invoke_market_all
+          agent:
+            name: Contoso-Market-Research-Analyst
+          conversationId: =System.ConversationId
+          input:
+            messages: =Local.LatestMessage
+          output:
+            messages: Local.LatestMessage
+            autoSend: false
+        - kind: SetVariable
+          id: restore_before_sales
           variable: Local.LatestMessage
           value: =UserMessage(Local.UserQuestion)
         - kind: InvokeAzureAgent
@@ -96,16 +115,10 @@ trigger:
           output:
             messages: Local.LatestMessage
             autoSend: false
-        - kind: InvokeAzureAgent
-          id: invoke_market_all
-          agent:
-            name: Contoso-Market-Research-Analyst
-          conversationId: =System.ConversationId
-          input:
-            messages: =Local.LatestMessage
-          output:
-            messages: Local.LatestMessage
-            autoSend: false
+        - kind: SetVariable
+          id: restore_before_credit
+          variable: Local.LatestMessage
+          value: =UserMessage(Local.UserQuestion)
         - kind: InvokeAzureAgent
           id: invoke_credit_all
           agent:
@@ -116,6 +129,10 @@ trigger:
           output:
             messages: Local.LatestMessage
             autoSend: false
+        - kind: SetVariable
+          id: restore_before_advisor
+          variable: Local.LatestMessage
+          value: =UserMessage(Local.UserQuestion)
         - kind: InvokeAzureAgent
           id: invoke_advisor
           agent:
@@ -130,4 +147,4 @@ trigger:
           id: end_all
 id: ""
 name: Workflow-Multi-Agente-Contoso
-description: Workflow con Router que decide la ruta
+description: Router workflow - routes to one specialist or runs all three plus the Strategy Advisor

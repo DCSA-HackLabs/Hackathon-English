@@ -25,21 +25,41 @@
                     "method": "get",
                     "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('<<Your Storage Account Name>>'))}/triggers/batch/onupdatedfile",
                     "queries": {
-                        "folderId": "<<Your  Incoming Container FolderID>>",
+                        "folderId": "<<Your Incoming PDF Container FolderID, e.g. documents-pdf>>",
                         "maxFileCount": 10,
                         "checkBothCreatedAndModifiedDateTime": false
                     }
                 },
                 "conditions": [
                     {
-                        "expression": "@endsWith(triggerOutputs()?['body']['name'], '.pdf')"
+                        "expression": "@endsWith(toLower(triggerOutputs()?['body']['name']), '.pdf')"
                     }
                 ]
             }
         },
         "actions": {
-            "Analyze_Document_for_Prebuilt_or_Custom_models_(v4.x_API)": {
+            "Get_blob_content_(V2)": {
                 "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('<<Your Storage Account Name>>'))}/files/@{encodeURIComponent(encodeURIComponent(triggerOutputs()?['body']['path']))}/content",
+                    "queries": {
+                        "inferContentType": true
+                    }
+                }
+            },
+            "Analyze_Document_for_Prebuilt_or_Custom_models_(v3.x_API)": {
+                "runAfter": {
+                    "Get_blob_content_(V2)": [
+                        "Succeeded"
+                    ]
+                },
                 "type": "ApiConnection",
                 "inputs": {
                     "host": {
@@ -48,11 +68,11 @@
                         }
                     },
                     "method": "post",
-                    "body": "{\"urlSource\":\"https://<<Your Storage Account Name>>.blob.core.windows.net/<<Your Json Container Name>>/@{triggerOutputs()?['body']['name']}\"}",
+                    "body": "{\"base64Source\":\"@{body('Get_blob_content_(V2)')?['$content']}\"}",
                     "headers": {
                         "Content-Type": "application/json"
                     },
-                    "path": "/documentModels/prebuilt-invoice:analyze",
+                    "path": "/documentModels/prebuilt-layout:analyze",
                     "queries": {
                         "api-version": "2023-07-31"
                     }
@@ -60,7 +80,7 @@
             },
             "Create_blob_(V2)": {
                 "runAfter": {
-                    "Analyze_Document_for_Prebuilt_or_Custom_models_(v4.x_API)": [
+                    "Analyze_Document_for_Prebuilt_or_Custom_models_(v3.x_API)": [
                         "Succeeded"
                     ]
                 },
@@ -68,18 +88,18 @@
                 "inputs": {
                     "host": {
                         "connection": {
-                            "name": "@parameters('$connections')['azureblob-1']['connectionId']"
+                            "name": "@parameters('$connections')['azureblob']['connectionId']"
                         }
                     },
                     "method": "post",
-                    "body": "@body('Analyze_Document_for_Prebuilt_or_Custom_models_(v4.x_API)')",
+                    "body": "@body('Analyze_Document_for_Prebuilt_or_Custom_models_(v3.x_API)')",
                     "headers": {
                         "ReadFileMetadataFromServer": true
                     },
-                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('<<Your storage account name>>'))}/files",
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('<<Your Storage Account Name>>'))}/files",
                     "queries": {
-                        "folderPath": "<<Your Json folder container name>>/",
-                        "name": "analyzed-invoice-@{triggerOutputs()?['body']['name']}.json",
+                        "folderPath": "<<Your Output Container Name, e.g. ai-processed>>/",
+                        "name": "@{triggerOutputs()?['body']['name']}.json",
                         "queryParametersSingleEncoded": true
                     }
                 },

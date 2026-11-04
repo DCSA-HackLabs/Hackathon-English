@@ -75,7 +75,7 @@ After the data has been structured in the **Gold layer**, participants will desi
  
 - Average credit score by segment
 - Retail value by category
-- Product return rate by brand
+- Revenue and units sold by brand
 - Monthly risk or sales trends
 - Performance by channel
 - Interest-free installment plan analysis
@@ -83,10 +83,10 @@ After the data has been structured in the **Gold layer**, participants will desi
 
 
 ### 🤖 Conversational Agents
-Using **AI Foundry**, participants will create **agents** capable of interacting with data through **natural language** without exposing technical code. These agents will address automation challenges and orchestrate multi-agent workflows using **large language models (LLMs)**. They will connect to semantic models through **Fabric Data Agents**, supporting conversational queries such as:
+Using **AI Foundry**, participants will create **agents** capable of interacting with data through **natural language** without exposing technical code. These agents will address automation challenges and orchestrate multi-agent workflows using **large language models (LLMs)**. They will connect to semantic models through **Fabric Data Agents** (exposed to Foundry through the **Fabric IQ** tool), supporting conversational queries such as:
  
 - *"Which segment has the highest average credit score?"*
-- *"Which products have the highest return rate?"*
+- *"Which sales channel generates the most revenue?"*
 - *"Is there a relationship between credit score and purchase amount?"*
 - *"How do customers purchase products based on their credit profiles?"*
 - *"Which product categories does each credit profile prefer?"*
@@ -98,6 +98,18 @@ Finally, the generated **insights** will be presented through **interactive Powe
 
 ---
  
+# ⚠️ Platform Changes (November 2026)
+
+Some services used in the challenges are changing. The challenge guides note each change where it applies.
+
+| Service | Change | Affects | What to use |
+|---|---|---|---|
+| Fabric Data Agent tool in Foundry | Deprecated Nov 6, 2026; tile already disabled | Challenges 4–5 | **Fabric IQ (OneLake Catalog)** tool |
+| Foundry Workflows (preview) | Retire Dec 1, 2026 | Challenge 5 | **Microsoft Agent Framework** |
+| gpt-4o | Marked Legacy in the model catalog | Challenges 4–5 | A current chat model, e.g. gpt-6-luna |
+| Logic Apps legacy designer | End of support Dec 2026 | Challenge 7 | The new designer |
+| Fabric trial capacity | Can't run Copilot or data agents | Challenges 3–5 | Paid F2 or larger capacity |
+
 # 🎯 Challenge Summary – From Insight to Decision
  
 ## 🏆 Challenge 00: Landing Zone Configuration and Data Preparation

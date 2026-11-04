@@ -27,7 +27,9 @@ Step-by-step guide to enable a conversational agent from AI Foundry integrated w
 
 ![Foundry-Start](/img/foundry-start.png)
 
-3. In the agent menu → **Playground** → select the model created as part of the prerequisites (**gpt-4o**) and click **Save**. You can use other conversational models if they are already enabled in the resource.
+3. In the agent menu → **Playground** → select the model created as part of the prerequisites and click **Save**. **gpt-4o** is now marked *Legacy* in the model catalog; use a current chat model such as **gpt-6-luna** (Global Standard, default quota was enough for all challenges).
+
+> If nothing was pre-provisioned, signing in to [ai.azure.com](https://ai.azure.com/) for the first time creates a Foundry resource and project for you automatically.
 
 ✅ **Expected result:** The agent is created and configured for conversational interaction.
 
@@ -36,30 +38,30 @@ Step-by-step guide to enable a conversational agent from AI Foundry integrated w
 
 ### 2 - Connect the Agent to the Fabric Data Agent
 
-1️. In the **Tools** section (you can also access it from Knowledge) → **+ Add a new tool** → **Fabric Data Agent** → **Add tool**, and then configure the **Data Agent** created in the previous Fabric challenge.
+> ⚠️ **The Fabric Data Agent tool is deprecated on November 6, 2026** and its tile is already disabled in the Foundry tool catalog. Use its replacement, **Fabric IQ (OneLake Catalog)**, as described below. You no longer need to copy workspace or artifact IDs.
 
+1. **Publish the data agent in Fabric.** Open the data agent → **⋯** → **Publish**. (The disk icon on the ribbon is *Save as*, which makes a copy; data agents save automatically.) Fill in the publish description. Foundry uses it to decide when to call the agent, so say what data it has and which questions it answers.
 
-![Foundry-Agent](/img/fabric-tool.png)
-
-
-2. In the dialog box, configure a new Fabric Data Agent connection by providing the following information:
-
-   - **Name**: A descriptive name for the connection
-   - **Workspace ID**: The ID of the workspace hosting the Data Agent. With the Data Agent open, this is the first alphanumeric identifier in the URL (1)
-   - **Artifact ID**:  The ID of the Data Agent artifact. With the Data Agent open, this is the second alphanumeric identifier in the URL (2)
-  
-Reference image for locating and verifying the Data Agent's `Workspace ID` and `Artifact ID`
-
-
-![Foundry-Agent](/img/workspace-artifact.png)
-     
-
-3. In Fabric, verify again that the Data Agent is connected to the **Gold semantic model** or the tables it needs to perform its tasks, including:  
-   - `gold.business_operations`  
+2. **Verify the data agent's scope in Fabric.** Check that it's connected to the **Gold semantic model** or the tables it needs, for example:
+   - `gold.business_operations`
    - `gold.credit_score`
    - `semantic model`
 
-4. Save the connection configuration.  
+   Scope each data agent to only the tables its role needs. A table that isn't selected can't be queried, even if the instructions are ignored.
+
+3. **Add the tool in Foundry.** In the agent's **Playground** → **Tools** → **Add** → **Add tools**, search for "fabric", select **Fabric IQ (OneLake Catalog)** → **Add tool**.
+
+4. **Pick the data agent.** The OneLake Catalog picker lists the Fabric items you can access. Select your published data agent → **Add**. Foundry creates the project connection for you.
+
+5. **Name the tool in the instructions** (next section): say which data agent is connected and which questions it handles. The model decides whether to call a tool from this text.
+
+6. **Save.** In the new Foundry experience, every save becomes the agent's active version.
+
+**What happens underneath:** the tool appears in the agent's YAML as `type: fabric_iq_preview`, with a `project_connection_id`, a `server_url` and `require_approval: never`. It's provided through an MCP server: at run time the agent first lists the tools, then calls the data agent. Queries run **as the signed-in user** (identity passthrough), so anyone who chats with the Foundry agent needs Read access to the data agent and its semantic model.
+
+**Also check:** new agents start with an auto-created `<agent-name>-toolbox` that contains **Web search**. If this agent should only answer from internal data, remove Web search from its tools.
+
+> The screenshots `fabric-tool.png` and `workspace-artifact.png` from the previous version of this step showed the deprecated connector and are no longer used.
 
 ✅ **Expected result:** The Foundry agent is connected to the Fabric Data Agent.
 
@@ -111,7 +113,7 @@ You have access to updated data from the Fabric Data Agent named 'Contoso Data A
    - **Starter Prompts**: example intents for the agent’s context. These will appear as suggestions for the user.
 
 ```
-"Which products have the highest return rate?"
+"Which sales channel generates the most revenue?"
 "Which category has the most valuable products?"
 "What is the total commercial value by brand?"
 ```
