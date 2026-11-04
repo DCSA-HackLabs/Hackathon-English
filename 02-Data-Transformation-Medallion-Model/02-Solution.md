@@ -90,9 +90,11 @@ df_fin = df_fin.withColumn("estimated_credit_score",
 
 ## **Penalty for high credit utilization 📉**
 
+`Credit_Utilization_Ratio` is stored as a percentage (about 20 to 49 in this dataset), not a 0–1 fraction. A threshold of `0.8` would penalize every customer, so this uses 40%, which affects about 6% of records.
+
 ```python
 df_fin = df_fin.withColumn("estimated_credit_score", 
-    when(col("Credit_Utilization_Ratio") > 0.8, col("estimated_credit_score") - 20)
+    when(col("Credit_Utilization_Ratio") > 40, col("estimated_credit_score") - 20)
     .otherwise(col("estimated_credit_score"))
 )
 ```

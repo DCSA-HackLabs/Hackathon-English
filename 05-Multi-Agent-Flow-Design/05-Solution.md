@@ -12,7 +12,7 @@ Before starting, ensure you have:
 - Creation of a Conversational Agent in AI Foundry integrated with Microsoft Fabric - see `04-Solution.md`.
 - Navigate to **Foundry Portal** → **Agents**
 - Verify existence of: **Contoso-Virtual-Analyst** (Sales Operations Analyst or the agent you created connected to Fabric)
-- Go to **Tools** and confirm **Bing Search** is available as a tool
+- Go to **Tools** and confirm **Bing Search** (or the built-in **Web search** tool) is available
 
   **Solution prototype**
 
@@ -318,6 +318,11 @@ When searching:
   ```
 
 2. Configure Tools
+
+  > **Simpler option:** in the new Foundry experience, new agents already include the built-in **Web search** tool (in an auto-created `<agent-name>-toolbox`). It uses Grounding with Bing without a separate Bing resource. If you use it, skip the Bing resource steps below.
+  >
+  > The same toolbox is added to *every* new agent. Remove Web search from the Router, Sales, Credit Risk and Strategy Advisor agents, so only Market Research can send text to the web.
+
   - In **Tools** click **Add** →  **+ Add a new tool**
   - Select **Grounding with Bing Search**
   - Configuration:
@@ -560,6 +565,13 @@ Several pro-code options are available for building multi-agent workflows, inclu
 
 This exercise uses the Workflows approach.
 
+> ⚠️ **Foundry Workflows (preview) retire on December 1, 2026.** Microsoft recommends Microsoft Agent Framework for new orchestration. The concepts in this step (routing, conditions, passing context between agents) carry over; the designer does not. To keep a workflow you built here, use the Foundry Toolkit for VS Code → **Generate Code**, which produces Agent Framework code you can run as a hosted agent.
+
+**Known behaviors of the Workflows designer:**
+- The workflow starts on `OnConversationStart`. Close and reopen **Preview** before each test question, or the second question in the same chat doesn't run the workflow again.
+- `autoSend: false` still shows each agent's answer in the Preview chat.
+- Long `[CROSS]` runs that call Fabric data agents can fail with **"network error"** in Preview. If that happens, retry, or test the same question against a single agent (see *Optional: compare with a single agent* at the end of this solution).
+
 **Note:** Before building the workflow, ensure that all five agents have been created: Router, Sales, Market Research, Credit Risk, and Strategy Advisor.
 
 **Navigate to Workflows**
@@ -667,13 +679,21 @@ Actions (YES branch):
 
 When the Router Agent emits `[CROSS]`, none of the individual conditions evaluate to true, so execution proceeds to `elseActions`. The three specialized agents run sequentially, and the Strategy Advisor synthesizes their results.
 
+**Apply the `restore` pattern before every agent in this branch, not just the first.** Each Invoke agent node writes its answer into `Local.LatestMessage`, so without a restore the next agent receives the previous agent's *answer* as its prompt instead of the user's question. In testing, this sent the Sales Analyst's internal revenue figures to the Market Research agent as a web search prompt, which is a data leak to an external service.
+
+**Run Market Research first.** All nodes share one conversation (`System.ConversationId`), so later agents can also read earlier answers in the history. Running Market Research before the internal-data agents means nothing internal is in that history when it searches the web.
 
 - **Set variable**: `LatestMessage` = `=UserMessage(Local.UserQuestion)`
-- **Invoke agent**: `Contoso-Sales-Analyst` → output: `Local.sales_output` (guardamos el output en una variable), autoSend: false
 - **Invoke agent**: `Contoso-Market-Research-Analyst` → output: `Local.LatestMessage`, autoSend: false
+- **Set variable**: `LatestMessage` = `=UserMessage(Local.UserQuestion)`
+- **Invoke agent**: `Contoso-Sales-Analyst` → output: `Local.LatestMessage`, autoSend: false
+- **Set variable**: `LatestMessage` = `=UserMessage(Local.UserQuestion)`
 - **Invoke agent**: `Contoso-Credit-Risk-Analyst` → output: `Local.LatestMessage`, autoSend: false
-- **Invoke agent**: `Contoso-Strategy-Advisor` → output: `Local.LatestMessage`, autoSend: false
+- **Set variable**: `LatestMessage` = `=UserMessage(Local.UserQuestion)`
+- **Invoke agent**: `Contoso-Strategy-Advisor` → output: `Local.LatestMessage`, autoSend: false (it reads the other agents' answers from the shared conversation)
 - **End Conversation**
+
+> The screenshots below show the original node order (Sales first) and are missing the extra Set variable nodes. Follow the list above.
 
 ![New Foundry](/img/else.png)
 ![New Foundry](/img/else1.png)
@@ -736,10 +756,12 @@ Expected flow:
 
 ✅ Router Agent → emits `[CROSS]`  
 ⏭️ No individual condition evaluates to true → execution proceeds to `elseActions`  
-✅ Sales Agent runs (retrieves internal smartphone data)  
 ✅ Market Research runs (retrieves external market trends)  
-✅ Credit Risk runs  
+✅ Sales Agent runs (retrieves internal smartphone data)  
+✅ Credit Risk runs (may reply `[SKIP]` if the question isn't about credit)  
 ✅ Strategy Advisor synthesizes the results and responds to the user
+
+Check the Market Research step in **Traces**: its input should be your question, not another agent's answer.
 
 ![New Foundry](/img/workflow12.png)
 
@@ -771,6 +793,19 @@ The **Traces** menu can also be used to inspect the execution of each node for t
 - Continuously refine the Router Agent’s system prompt by adding classification examples (few-shot examples). Adding more examples specific to Contoso’s domain will improve routing accuracy.
 - Consider extending the workflow with branches that retry routing when the Router Agent emits an unrecognized tag, as well as secondary workflows for edge cases.
 - This workflow is deterministic but uses intelligent initial routing. As an optional extension, create a **Group Chat** workflow to support more autonomous collaboration among agents.
+- Don't copy reference data such as product categories into agent instructions. It goes out of date when the data changes. Let the agent look it up through its data tools instead.
+
+### Optional: compare with a single agent
+
+Multi-agent designs add hand-offs, and each hand-off can lose context. Measure whether this workflow beats a simpler design before adopting it.
+
+1. Create one agent (for example `Contoso-Single-Agent-Test`) with the same tools: both Fabric data agents and Web search.
+2. Ask it the three `[CROSS]` scenarios from the challenge and record answer quality and response time.
+3. Compare with the workflow's results.
+
+In our run, the single agent answered the "premium products for High-profile customers" scenario in 146 seconds. It checked which categories Contoso sells *before* searching the web, so its research was relevant. In the workflow, Market Research can't see internal data, so it researched premium products in general (for example, fine jewelry, which Contoso doesn't sell).
+
+Multi-agent structure still earns its place where you need a **trust boundary**: a research agent that only ever sees public inputs, or a synthesizer with no outbound tools. Choose it for those guarantees, not by default.
 
 
 ### 🎓 Bonus: Exploring the Group Chat Workflow (Optional)

@@ -1,29 +1,41 @@
+#Requires -Version 7.0
 <#
 .SYNOPSIS
     Loads JSON data into Cosmos DB and PDF files into the deployed storage account.
 
 .DESCRIPTION
     This script:
-    1. Loads transactions.json into Cosmos DB (Transactions container)
-    2. Loads creditScore.json into Cosmos DB (CreditScores container)
-    3. Loads product.json into Cosmos DB (Products container)
-    4. Extracts and uploads PDF files from "Financial Data Zip" to the Storage Account (documents-pdf container)
+    1. Loads transactions.json into Cosmos DB (transactions container)
+    2. Loads creditScore.json into Cosmos DB (creditScore container)
+    3. Loads products.json into Cosmos DB (products container)
+    4. Extracts and uploads PDF files from "Financial Data.zip" to the Storage Account (documents-pdf container)
+
+    Container names and partition keys match azuredeploy.json: every container is partitioned on /id.
+    If a container is missing, the script creates it with the same settings.
+
+    Requires PowerShell 7 (the default in Azure Cloud Shell). creditScore.json has both "ID" and "id"
+    fields, which only ConvertFrom-Json -AsHashtable can read.
 
 .PARAMETER ResourceGroupName
     Name of the Resource Group where the resources were deployed.
 
-.EXAMPLE
-    .\run-data-loader.ps1 -ResourceGroupName "rg-fabric-challenge-test"
+.PARAMETER SkipPdfs
+    Skip the PDF upload (for example, when you only need the Cosmos DB data).
 
 .EXAMPLE
-    # Run directly from GitHub:
-    # irm "https://raw.githubusercontent.com/DCSA-HackLabs/Hackathon-English/refs/heads/main/run-data-loader.ps1" -OutFile run-data-loader.ps1; .\run-data-loader.ps1
+    ./run-data-loader.ps1 -ResourceGroupName "rg-fabric-challenge-test"
+
+.EXAMPLE
+    # From Azure Cloud Shell (PowerShell):
+    # git clone https://github.com/DCSA-HackLabs/Hackathon-English.git; cd Hackathon-English; ./run-data-loader.ps1
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false, HelpMessage = "Name of the Resource Group")]
-    [string]$ResourceGroupName
+    [string]$ResourceGroupName,
+
+    [switch]$SkipPdfs
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,15 +49,15 @@ function Write-Success { param([string]$Message) Write-Host "✅ $Message" -Fore
 function Write-Info { param([string]$Message) Write-Host "ℹ️  $Message" -ForegroundColor Yellow }
 function Write-ErrorMsg { param([string]$Message) Write-Host "❌ $Message" -ForegroundColor Red }
 
-# Function for inserting a document into Cosmos DB
+# Insert (upsert) one document into Cosmos DB through the REST API.
+# Every container in azuredeploy.json is partitioned on /id, so the partition key value is always the id.
 function Add-CosmosDocument {
     param(
         [string]$Endpoint,
         [string]$Key,
         [string]$Database,
         [string]$Container,
-        [hashtable]$Document,
-        [string]$PartitionKeyField = "id",
+        [System.Collections.IDictionary]$Document,
         [ref]$LastError = $null
     )
 
@@ -62,11 +74,7 @@ function Add-CosmosDocument {
     $signature = [System.Convert]::ToBase64String($hash)
     $authToken = [System.Web.HttpUtility]::UrlEncode("type=master&ver=1.0&sig=$signature")
 
-    # Get partition key value
-    $partitionKeyValue = $Document[$PartitionKeyField]
-    if (-not $partitionKeyValue) {
-        $partitionKeyValue = $Document.id
-    }
+    $partitionKeyValue = $Document["id"]
 
     $headers = @{
         "Authorization"                    = $authToken
@@ -79,17 +87,109 @@ function Add-CosmosDocument {
 
     try {
         $body = $Document | ConvertTo-Json -Depth 10 -Compress
-        $response = Invoke-RestMethod -Uri $uri -Method POST -Headers $headers -Body $body -ContentType "application/json"
+        $null = Invoke-RestMethod -Uri $uri -Method POST -Headers $headers -Body $body -ContentType "application/json"
         return $true
     }
     catch {
         if ($_.Exception.Response.StatusCode -eq 409) {
             return $true  # Already exists
         }
-        if ($LastError -ne $null) {
+        if ($null -ne $LastError) {
             $LastError.Value = $_.Exception.Message
         }
         return $false
+    }
+}
+
+# Create the database and container if they don't exist, with the same settings as azuredeploy.json.
+function Initialize-CosmosContainer {
+    param([string]$Account, [string]$ResourceGroup, [string]$Database, [string]$Container)
+
+    $dbExists = az cosmosdb sql database show --account-name $Account --resource-group $ResourceGroup --name $Database --output json 2>$null
+    if (-not $dbExists) {
+        Write-Info "Database '$Database' not found. Creating it..."
+        az cosmosdb sql database create --account-name $Account --resource-group $ResourceGroup --name $Database --output none
+    }
+
+    $containerExists = az cosmosdb sql container show --account-name $Account --resource-group $ResourceGroup --database-name $Database --name $Container --output json 2>$null
+    if (-not $containerExists) {
+        Write-Info "Container '$Container' not found. Creating it (partition key /id)..."
+        az cosmosdb sql container create --account-name $Account --resource-group $ResourceGroup --database-name $Database --name $Container --partition-key-path "/id" --output none
+    }
+}
+
+# Read a JSON file and return its records as hashtables.
+# -AsHashtable is required: creditScore.json has keys that differ only by case ("ID" and "id").
+function Read-JsonRecords {
+    param([string]$Path, [string]$WrapperProperty)
+
+    $json = Get-Content -Path $Path -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable
+    if ($json -is [System.Collections.IList]) { return , $json }
+    if ($json.ContainsKey($WrapperProperty)) { return , $json[$WrapperProperty] }
+    if ($json.ContainsKey("data")) { return , $json["data"] }
+    return , @($json)
+}
+
+# Load one JSON file into one container and report the counts.
+function Import-JsonFile {
+    param(
+        [string]$FileName,
+        [string]$Container,
+        [string]$WrapperProperty,
+        [string[]]$IdFallbackFields
+    )
+
+    Write-Step "Loading $FileName into Cosmos DB ($Container)..."
+
+    $file = Get-ChildItem -Path $DatasetPath -Filter $FileName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $file) {
+        Write-ErrorMsg "$FileName not found in: $DatasetPath"
+        $script:loadErrors++
+        return
+    }
+
+    Initialize-CosmosContainer -Account $cosmosAccountName -ResourceGroup $ResourceGroupName -Database $DatabaseName -Container $Container
+
+    $data = Read-JsonRecords -Path $file.FullName -WrapperProperty $WrapperProperty
+    $total = $data.Count
+    $loaded = 0
+    $failed = 0
+    $firstError = ""
+
+    Write-Info "Found $total records to load..."
+    $progressInterval = if ($total -lt 50) { 1 } elseif ($total -lt 200) { 10 } else { 50 }
+
+    foreach ($document in $data) {
+        # Cosmos DB requires an id, and it is also the partition key
+        if (-not $document.ContainsKey("id")) {
+            $fallback = $IdFallbackFields | Where-Object { $document.ContainsKey($_) } | Select-Object -First 1
+            $document["id"] = if ($fallback) { [string]$document[$fallback] } else { [guid]::NewGuid().ToString() }
+        }
+
+        $errorRef = [ref]""
+        $success = Add-CosmosDocument -Endpoint $cosmosEndpoint -Key $cosmosKey `
+            -Database $DatabaseName -Container $Container -Document $document -LastError $errorRef
+
+        if ($success) { $loaded++ } else {
+            $failed++
+            if ($failed -eq 1) { $firstError = $errorRef.Value }
+        }
+
+        $done = $loaded + $failed
+        if (($done % $progressInterval -eq 0) -or ($done -eq $total)) {
+            $percent = [math]::Round(($done / $total) * 100)
+            Write-Host "`r  ⏳ Progress: $done / $total ($percent%) - ✅$loaded ❌$failed" -ForegroundColor Gray -NoNewline
+        }
+    }
+    Write-Host ""
+
+    if ($failed -gt 0) {
+        Write-ErrorMsg "$Container : $loaded loaded / $failed failed / $total total"
+        Write-Info "First error: $firstError"
+        $script:loadErrors++
+    }
+    else {
+        Write-Success "$Container : $loaded loaded / $total total"
     }
 }
 
@@ -103,9 +203,9 @@ Write-Host @"
 ║   FABRIC HACKATHON - DATA LOADER                                             ║
 ║                                                                              ║
 ║   This script will load:                                                     ║
-║   • transactions.json into Cosmos DB (Transactions container)                ║
-║   • creditScore.json into Cosmos DB (CreditScores container)                 ║
-║   • product.json into Cosmos DB (Products container)                         ║
+║   • transactions.json into Cosmos DB (transactions container)                ║
+║   • creditScore.json into Cosmos DB (creditScore container)                  ║
+║   • products.json into Cosmos DB (products container)                        ║
 ║   • Financial Data (PDFs) into the Storage Account                           ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -119,7 +219,7 @@ Write-Host @"
 # Verify that Azure az CLI is installed
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     Write-ErrorMsg "Azure CLI is not installed. Please install it first:"
-    Write-Host "   https://docs.microsoft.com/cli/azure/install-azure-cli" -ForegroundColor Yellow
+    Write-Host "   https://learn.microsoft.com/cli/azure/install-azure-cli" -ForegroundColor Yellow
     exit 1
 }
 
@@ -181,8 +281,7 @@ Write-Success "Storage Account found: $storageAccountName"
 # ============================================================================
 # DETERMINE DATASETS PATH
 # ============================================================================
-$ScriptRoot = $PSScriptRoot
-$DatasetPath = Join-Path $ScriptRoot "Datasets"
+$DatasetPath = Join-Path $PSScriptRoot "Datasets"
 
 # If it doesn't exist, try the current path
 if (-not (Test-Path $DatasetPath)) {
@@ -199,410 +298,101 @@ Write-Info "Searching files in: $DatasetPath"
 # ============================================================================
 # LOAD JSON DATA TO COSMOS DB
 # ============================================================================
-Write-Step "Loading data to Cosmos DB..."
-
+# Names match the containers created by azuredeploy.json
 $DatabaseName = "FabricChallengeDB"
-$ContainerName = "Transactions"
+$script:loadErrors = 0
 
-# Find the transactions.json file
-$transactionsFile = Get-ChildItem -Path $DatasetPath -Filter "transactions.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+Import-JsonFile -FileName "transactions.json" -Container "transactions" `
+    -WrapperProperty "transactions" -IdFallbackFields @("transaction_id", "transactionId")
 
-if ($transactionsFile) {
-    Write-Info "Processing: $($transactionsFile.Name) -> $ContainerName"
-    
-    # Read JSON
-    $jsonContent = Get-Content -Path $transactionsFile.FullName -Raw -Encoding UTF8
-    $transactions = $jsonContent | ConvertFrom-Json
-    
-    # If the JSON is an array, process it directly; if it's an object with a property, extract it
-    if ($transactions -is [Array]) {
-        $data = $transactions
-    }
-    elseif ($transactions.transactions) {
-        $data = $transactions.transactions
-    }
-    elseif ($transactions.data) {
-        $data = $transactions.data
-    }
-    else {
-        # Assume it's a single document or an object with multiple properties
-        $data = @($transactions)
-    }
-    
-    $total = $data.Count
-    $loaded = 0
-    $failed = 0
-    $lastErrorMsg = ""
-    
-    Write-Info "Found $total transactions to load..."
-    
-    # Test with the first document to verify connection
-    Write-Info "Verifying connection to Cosmos DB..."
-    $testItem = $data[0]
-    $testDoc = @{}
-    foreach ($prop in $testItem.PSObject.Properties) {
-        $testDoc[$prop.Name] = $prop.Value
-    }
-    if (-not $testDoc.ContainsKey("id")) {
-        $testDoc["id"] = [guid]::NewGuid().ToString()
-    }
-    
-    $testError = [ref]""
-    $testPartitionKey = if ($testDoc.ContainsKey("transactionId")) { "transactionId" } 
-                        elseif ($testDoc.ContainsKey("transaction_id")) { "transaction_id" }
-                        else { "id" }
-    
-    $testSuccess = Add-CosmosDocument -Endpoint $cosmosEndpoint -Key $cosmosKey `
-        -Database $DatabaseName -Container $ContainerName -Document $testDoc `
-        -PartitionKeyField $testPartitionKey -LastError $testError
-    
-    if (-not $testSuccess) {
-        Write-ErrorMsg "Error connecting to Cosmos DB: $($testError.Value)"
-        Write-Info "Checking if the database and container exist..."
-        
-        # Verify that the database exists
-        $dbExists = az cosmosdb sql database show --account-name $cosmosAccountName --resource-group $ResourceGroupName --name $DatabaseName --output json 2>$null
-        if (-not $dbExists) {
-            Write-ErrorMsg "The database '$DatabaseName' does not exist. Creating it..."
-            az cosmosdb sql database create --account-name $cosmosAccountName --resource-group $ResourceGroupName --name $DatabaseName --output none
-        }
-        
-        # Verify that the container exists
-        $containerExists = az cosmosdb sql container show --account-name $cosmosAccountName --resource-group $ResourceGroupName --database-name $DatabaseName --name $ContainerName --output json 2>$null
-        if (-not $containerExists) {
-            Write-ErrorMsg "The container '$ContainerName' does not exist. Creating it..."
-            az cosmosdb sql container create --account-name $cosmosAccountName --resource-group $ResourceGroupName --database-name $DatabaseName --name $ContainerName --partition-key-path "/id" --output none
-        }
-        
-        Write-Success "Database and container verified/created"
-    }
-    else {
-        Write-Success "Connection to Cosmos DB verified"
-        $loaded = 1  # First document already inserted
-    }
-    
-    # Continue processing the remaining documents
-    $startIndex = if ($loaded -eq 1) { 1 } else { 0 }
-    
-    for ($i = $startIndex; $i -lt $data.Count; $i++) {
-        $item = $data[$i]
-        
-        # Convert PSObject to hashtable
-        $document = @{}
-        foreach ($prop in $item.PSObject.Properties) {
-            $document[$prop.Name] = $prop.Value
-        }
-        
-        # Ensure that the id property exists (required by Cosmos DB)
-        if (-not $document.ContainsKey("id")) {
-            if ($document.ContainsKey("transactionId")) {
-                $document["id"] = $document["transactionId"]
-            }
-            elseif ($document.ContainsKey("transaction_id")) {
-                $document["id"] = $document["transaction_id"]
-            }
-            else {
-                $document["id"] = [guid]::NewGuid().ToString()
-            }
-        }
-        
-        # Determine partition key field
-        $partitionKeyField = if ($document.ContainsKey("transactionId")) { "transactionId" } 
-                            elseif ($document.ContainsKey("transaction_id")) { "transaction_id" }
-                            else { "id" }
-        
-        $errorRef = [ref]""
-        # Insert into Cosmos DB
-        $success = Add-CosmosDocument -Endpoint $cosmosEndpoint -Key $cosmosKey `
-            -Database $DatabaseName -Container $ContainerName -Document $document `
-            -PartitionKeyField $partitionKeyField -LastError $errorRef
-        
-        if ($success) { 
-            $loaded++ 
-        } else { 
-            $failed++
-            if ($failed -eq 1) {
-                $lastErrorMsg = $errorRef.Value
-            }
-        }
-        
-        # Show progress every 10 records or every record if there are few
-        $progressInterval = if ($total -lt 50) { 1 } elseif ($total -lt 200) { 10 } else { 50 }
-        if ((($loaded + $failed) % $progressInterval -eq 0) -or (($loaded + $failed) -eq $total)) {
-            $percent = [math]::Round((($loaded + $failed) / $total) * 100)
-            Write-Host "`r  ⏳ Progress: $($loaded + $failed) / $total ($percent%) - ✅$loaded ❌$failed" -ForegroundColor Gray -NoNewline
-        }
-    }
-    Write-Host ""  # Start a new line after the progress output
-    
-    if ($failed -gt 0 -and $lastErrorMsg) {
-        Write-Info "Last error: $lastErrorMsg"
-    }
-    
-    Write-Success "$ContainerName : $loaded loaded / $failed failed / $total total"
-}
-else {
-    Write-Info "transactions.json not found in: $DatasetPath"
-    Write-Info "Make sure the file is in the Datasets folder"
-}
+Import-JsonFile -FileName "creditScore.json" -Container "creditScore" `
+    -WrapperProperty "creditScores" -IdFallbackFields @("ID", "Customer_ID")
 
-
-# ============================================================================
-# LOAD creditScore.json INTO COSMOS DB
-# ============================================================================
-Write-Step "Loading creditScore.json into Cosmos DB..."
-
-$CreditScoreContainerName = "CreditScores"
-
-$creditScoreFile = Get-ChildItem -Path $DatasetPath -Filter "creditScore.json" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-if ($creditScoreFile) {
-    Write-Info "Processing: $($creditScoreFile.Name) -> $CreditScoreContainerName"
-
-    $jsonContent = Get-Content -Path $creditScoreFile.FullName -Raw -Encoding UTF8
-    $creditScores = $jsonContent | ConvertFrom-Json
-
-    if ($creditScores -is [Array]) {
-        $csData = $creditScores
-    }
-    elseif ($creditScores.creditScores) {
-        $csData = $creditScores.creditScores
-    }
-    elseif ($creditScores.data) {
-        $csData = $creditScores.data
-    }
-    else {
-        $csData = @($creditScores)
-    }
-
-    $csTotal = $csData.Count
-    $csLoaded = 0
-    $csFailed = 0
-    $csLastErrorMsg = ""
-
-    Write-Info "Found $csTotal credit score records to load..."
-
-    foreach ($item in $csData) {
-        $document = @{}
-        foreach ($prop in $item.PSObject.Properties) {
-            $document[$prop.Name] = $prop.Value
-        }
-
-        if (-not $document.ContainsKey("id")) {
-            if ($document.ContainsKey("creditScoreId")) {
-                $document["id"] = $document["creditScoreId"]
-            }
-            elseif ($document.ContainsKey("credit_score_id")) {
-                $document["id"] = $document["credit_score_id"]
-            }
-            elseif ($document.ContainsKey("customerId")) {
-                $document["id"] = $document["customerId"]
-            }
-            else {
-                $document["id"] = [guid]::NewGuid().ToString()
-            }
-        }
-
-        $partitionKeyField = if ($document.ContainsKey("creditScoreId")) { "creditScoreId" }
-                            elseif ($document.ContainsKey("credit_score_id")) { "credit_score_id" }
-                            else { "id" }
-
-        $errorRef = [ref]""
-        $success = Add-CosmosDocument -Endpoint $cosmosEndpoint -Key $cosmosKey `
-            -Database $DatabaseName -Container $CreditScoreContainerName -Document $document `
-            -PartitionKeyField $partitionKeyField -LastError $errorRef
-
-        if ($success) { $csLoaded++ } else {
-            $csFailed++
-            if ($csFailed -eq 1) { $csLastErrorMsg = $errorRef.Value }
-        }
-
-        $progressInterval = if ($csTotal -lt 50) { 1 } elseif ($csTotal -lt 200) { 10 } else { 50 }
-        if ((($csLoaded + $csFailed) % $progressInterval -eq 0) -or (($csLoaded + $csFailed) -eq $csTotal)) {
-            $percent = [math]::Round((($csLoaded + $csFailed) / $csTotal) * 100)
-            Write-Host "`r  ⏳ Progress: $($csLoaded + $csFailed) / $csTotal ($percent%) - ✅$csLoaded ❌$csFailed" -ForegroundColor Gray -NoNewline
-        }
-    }
-    Write-Host ""
-
-    if ($csFailed -gt 0 -and $csLastErrorMsg) {
-        Write-Info "Last error: $csLastErrorMsg"
-    }
-
-    Write-Success "$CreditScoreContainerName : $csLoaded loaded / $csFailed failed / $csTotal total"
-}
-else {
-    Write-Info "creditScore.json not found in: $DatasetPath"
-}
-
-# ============================================================================
-# LOAD product.json INTO COSMOS DB
-# ============================================================================
-Write-Step "Loading product.json into Cosmos DB..."
-
-$ProductContainerName = "Products"
-
-$productFile = Get-ChildItem -Path $DatasetPath -Filter "product.json" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-if ($productFile) {
-    Write-Info "Processing: $($productFile.Name) -> $ProductContainerName"
-
-    $jsonContent = Get-Content -Path $productFile.FullName -Raw -Encoding UTF8
-    $products = $jsonContent | ConvertFrom-Json
-
-    if ($products -is [Array]) {
-        $prodData = $products
-    }
-    elseif ($products.products) {
-        $prodData = $products.products
-    }
-    elseif ($products.data) {
-        $prodData = $products.data
-    }
-    else {
-        $prodData = @($products)
-    }
-
-    $prodTotal = $prodData.Count
-    $prodLoaded = 0
-    $prodFailed = 0
-    $prodLastErrorMsg = ""
-
-    Write-Info "Found $prodTotal products to load..."
-
-    foreach ($item in $prodData) {
-        $document = @{}
-        foreach ($prop in $item.PSObject.Properties) {
-            $document[$prop.Name] = $prop.Value
-        }
-
-        if (-not $document.ContainsKey("id")) {
-            if ($document.ContainsKey("productId")) {
-                $document["id"] = $document["productId"]
-            }
-            elseif ($document.ContainsKey("product_id")) {
-                $document["id"] = $document["product_id"]
-            }
-            else {
-                $document["id"] = [guid]::NewGuid().ToString()
-            }
-        }
-
-        $partitionKeyField = if ($document.ContainsKey("productId")) { "productId" }
-                            elseif ($document.ContainsKey("product_id")) { "product_id" }
-                            else { "id" }
-
-        $errorRef = [ref]""
-        $success = Add-CosmosDocument -Endpoint $cosmosEndpoint -Key $cosmosKey `
-            -Database $DatabaseName -Container $ProductContainerName -Document $document `
-            -PartitionKeyField $partitionKeyField -LastError $errorRef
-
-        if ($success) { $prodLoaded++ } else {
-            $prodFailed++
-            if ($prodFailed -eq 1) { $prodLastErrorMsg = $errorRef.Value }
-        }
-
-        $progressInterval = if ($prodTotal -lt 50) { 1 } elseif ($prodTotal -lt 200) { 10 } else { 50 }
-        if ((($prodLoaded + $prodFailed) % $progressInterval -eq 0) -or (($prodLoaded + $prodFailed) -eq $prodTotal)) {
-            $percent = [math]::Round((($prodLoaded + $prodFailed) / $prodTotal) * 100)
-            Write-Host "`r  ⏳ Progress: $($prodLoaded + $prodFailed) / $prodTotal ($percent%) - ✅$prodLoaded ❌$prodFailed" -ForegroundColor Gray -NoNewline
-        }
-    }
-    Write-Host ""
-
-    if ($prodFailed -gt 0 -and $prodLastErrorMsg) {
-        Write-Info "Last error: $prodLastErrorMsg"
-    }
-
-    Write-Success "$ProductContainerName : $prodLoaded loaded / $prodFailed failed / $prodTotal total"
-}
-else {
-    Write-Info "product.json not found in: $DatasetPath"
-}
+Import-JsonFile -FileName "products.json" -Container "products" `
+    -WrapperProperty "products" -IdFallbackFields @("Internal ID", "Index")
 
 # ============================================================================
 # UPLOAD PDF FILES (FINANCIAL DATA ZIP) TO THE STORAGE ACCOUNT
 # ============================================================================
-Write-Step "Processing Financial Data (PDFs) for Storage Account..."
-
-# Find the ZIP archive containing the Financial Data files
-$pdfZipFile = Get-ChildItem -Path $DatasetPath -Filter "*Financial*Data*.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-# If not found with that pattern, look for any ZIP
-if (-not $pdfZipFile) {
-    $pdfZipFile = Get-ChildItem -Path $DatasetPath -Filter "*.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
-}
-
-if ($pdfZipFile) {
-    Write-Info "ZIP found: $($pdfZipFile.Name)"
-    
-    # Create temporary folder
-    $tempFolder = Join-Path $env:TEMP "pdf-extract-$(Get-Random)"
-    New-Item -Path $tempFolder -ItemType Directory -Force | Out-Null
-    
-    try {
-        # Extract ZIP
-        Write-Info "Extracting files from ZIP..."
-        Expand-Archive -Path $pdfZipFile.FullName -DestinationPath $tempFolder -Force
-        
-        # Find PDFs (including subfolders)
-        $pdfFiles = Get-ChildItem -Path $tempFolder -Filter "*.pdf" -Recurse
-        
-        if ($pdfFiles.Count -gt 0) {
-            Write-Info "Found $($pdfFiles.Count) PDF files"
-            
-            $uploadedCount = 0
-            foreach ($pdf in $pdfFiles) {
-                Write-Info "Uploading $($pdf.Name)..."
-                az storage blob upload `
-                    --account-name $storageAccountName `
-                    --container-name "documents-pdf" `
-                    --file $pdf.FullName `
-                    --name $pdf.Name `
-                    --auth-mode login `
-                    --overwrite `
-                    --output none 2>$null
-                $uploadedCount++
-            }
-            Write-Success "$uploadedCount PDF files uploaded to the 'documents-pdf' container"
-        }
-        else {
-            Write-Info "No PDF files found in the ZIP"
-        }
-    }
-    finally {
-        # Clean up temporary folder
-        if (Test-Path $tempFolder) {
-            Remove-Item -Path $tempFolder -Recurse -Force
-        }
-    }
+if ($SkipPdfs) {
+    Write-Info "Skipping PDF upload (-SkipPdfs)"
 }
 else {
-    Write-Info "No ZIP file with Financial Data found in: $DatasetPath"
-    Write-Info "The script looks for files matching '*Financial*Data*.zip' or any .zip file"
+    Write-Step "Processing Financial Data (PDFs) for Storage Account..."
+
+    $pdfZipFile = Get-ChildItem -Path $DatasetPath -Filter "*Financial*Data*.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($pdfZipFile) {
+        Write-Info "ZIP found: $($pdfZipFile.Name)"
+
+        # $env:TEMP is not set in Linux (including Cloud Shell); GetTempPath works on every platform
+        $tempFolder = Join-Path ([System.IO.Path]::GetTempPath()) "pdf-extract-$(Get-Random)"
+        New-Item -Path $tempFolder -ItemType Directory -Force | Out-Null
+
+        try {
+            Write-Info "Extracting files from ZIP..."
+            Expand-Archive -Path $pdfZipFile.FullName -DestinationPath $tempFolder -Force
+
+            $pdfCount = (Get-ChildItem -Path $tempFolder -Filter "*.pdf" -Recurse).Count
+            if ($pdfCount -gt 0) {
+                Write-Info "Uploading $pdfCount PDF files in one batch (this takes a few minutes)..."
+
+                # One batched call instead of one az call per file. Requires the
+                # Storage Blob Data Contributor role on the storage account (--auth-mode login).
+                az storage blob upload-batch `
+                    --account-name $storageAccountName `
+                    --destination "documents-pdf" `
+                    --source $tempFolder `
+                    --pattern "*.pdf" `
+                    --auth-mode login `
+                    --overwrite `
+                    --output none
+
+                if ($LASTEXITCODE -ne 0) {
+                    Write-ErrorMsg "PDF upload failed. Check that you have the Storage Blob Data Contributor role on '$storageAccountName'."
+                    $script:loadErrors++
+                }
+                else {
+                    $uploaded = az storage blob list --account-name $storageAccountName --container-name "documents-pdf" `
+                        --auth-mode login --num-results "*" --query "length([?ends_with(name, '.pdf')])" --output tsv
+                    Write-Success "$uploaded PDF files are in the 'documents-pdf' container (expected $pdfCount)"
+                }
+            }
+            else {
+                Write-Info "No PDF files found in the ZIP"
+            }
+        }
+        finally {
+            if (Test-Path $tempFolder) {
+                Remove-Item -Path $tempFolder -Recurse -Force
+            }
+        }
+    }
+    else {
+        Write-ErrorMsg "No ZIP file matching '*Financial*Data*.zip' found in: $DatasetPath"
+        $script:loadErrors++
+    }
 }
 
 # ============================================================================
 # FINAL SUMMARY
 # ============================================================================
-Write-Host @"
+if ($script:loadErrors -gt 0) {
+    Write-Host "`n⚠️  DATA LOAD FINISHED WITH $($script:loadErrors) ERROR(S). Review the messages above." -ForegroundColor Red
+}
+else {
+    Write-Host "`n🎉  DATA LOAD COMPLETED!" -ForegroundColor Green
+}
 
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║   🎉  DATA LOAD COMPLETED!                                                   ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-"@ -ForegroundColor Green
-
+Write-Host ""
 Write-Host "📋 SUMMARY:" -ForegroundColor Cyan
 Write-Host "═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
 Write-Host ""
 Write-Host "🗄️  COSMOS DB: $cosmosAccountName" -ForegroundColor Yellow
-Write-Host "   Database:   FabricChallengeDB"
-Write-Host "   Container: Transactions (data from transactions.json)"
-Write-Host "   Container: CreditScores (data from creditScore.json)"
-Write-Host "   Container: Products (data from product.json)"
+Write-Host "   Database:   $DatabaseName"
+Write-Host "   Container: transactions (data from transactions.json)"
+Write-Host "   Container: creditScore (data from creditScore.json)"
+Write-Host "   Container: products (data from products.json)"
 Write-Host ""
 Write-Host "📦 STORAGE ACCOUNT: $storageAccountName" -ForegroundColor Yellow
 Write-Host "   Data container:"
@@ -614,3 +404,5 @@ Write-Host "`n🔗 CONNECT FROM FABRIC:" -ForegroundColor Cyan
 Write-Host "   Cosmos DB Endpoint: $cosmosEndpoint"
 Write-Host "   Storage Account:    https://$storageAccountName.dfs.core.windows.net/"
 Write-Host ""
+
+if ($script:loadErrors -gt 0) { exit 1 }

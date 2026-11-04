@@ -27,6 +27,10 @@ Make sure the following resource providers are registered in your **Azure** subs
 - Create a **new Microsoft Fabric trial**, or
 - Use an **already provisioned Fabric capacity** in your Azure subscription.
 
+> ⚠️ A Fabric **trial capacity can't run Copilot or Fabric data agents**, which Challenges 3–5 need. Use a paid **F2 or larger** capacity for those challenges. Create the capacity in the **same region** as your workspace: a workspace that already contains Fabric items can't move to a capacity in another region.
+>
+> A paid capacity bills every hour it runs. **Pause it** in the Azure portal when you're not using it, and delete it after the event.
+
 **Fabric configuration requirements:**
 - At least one member assigned as a **Microsoft Fabric administrator**.
 - A **Fabric workspace** assigned to the team.
@@ -38,7 +42,7 @@ Make sure the following resource providers are registered in your **Azure** subs
 ## ✅ Azure OpenAI Requirements
 **TPM quota for OpenAI models:**
 - `text-embedding-ada-002`
-- `gpt-4o`
+- `gpt-4o` (now marked **Legacy** in the Foundry model catalog; a current chat model such as `gpt-6-luna` works for all challenges)
 
 If the current quota is less than **100,000**, request an increase before the event to ensure availability.
 > ⏱️ Approvals usually take 24 hours, so it is critical to complete this step in advance.

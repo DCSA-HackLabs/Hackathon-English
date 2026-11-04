@@ -37,7 +37,7 @@ After completing this challenge you will be able to:
 
 ![Foundry](/img/foundry-start.png)
 
-3️⃣ In the agent menu → **Playground** → select the model you created as a prerequisite (**gpt-4o**).
+3️⃣ In the agent menu → **Playground** → select the model you created as a prerequisite (**gpt-4o** is now Legacy; a current model such as **gpt-6-luna** works).
 
 ![Foundry](/img/foundry-agent.png)
 
@@ -48,12 +48,15 @@ After completing this challenge you will be able to:
 ## 🚀 Step 2: Connect the Agent to the Fabric Data Agent
 💡 *Why?* The Data Agent is the link between AI Foundry and the governed data in Microsoft Fabric.
 
-1️⃣ In the agent **Tools** or **Knowledge** section, configure the **Data Agent** created in the previous Fabric challenge.
+> ⚠️ The **Fabric Data Agent** tool in Foundry is deprecated on **November 6, 2026**. Use its replacement, **Fabric IQ (OneLake Catalog)**.
+
+1️⃣ In Fabric, **publish** the Data Agent created in the previous challenge, with a description of what it answers.
 2️⃣ Verify that the Data Agent is linked to the **Gold semantic model** or the tables needed for its work, such as:
    - `gold.business_operations`
    - `gold.credit_score`
 
-3️⃣ Save the connection settings.
+3️⃣ In the Foundry agent's **Tools** section, add **Fabric IQ (OneLake Catalog)** and select your published Data Agent from the catalog.
+4️⃣ Save the agent.
 
 ✅ **Expected result:** The agent can access the semantic model and query data in a controlled way.
 
@@ -82,7 +85,7 @@ After completing this challenge you will be able to:
 | **Intent / Theme** | **Guidance prompt (analyst question)** |
 |--------------------|----------------------------------------|
 | score_by_segment | “What is the average score by segment?” |
-| returns_by_product | “Which products have the highest return rate?” |
+| revenue_by_channel | “Which sales channel generates the most revenue?” |
 | valuable_products_by_category | “Which category has the most valuable products?” |
 | total_sales_by_brand | “What is the total commercial value by brand?” |
 
@@ -131,7 +134,7 @@ After completing this challenge you will be able to:
 ## 📝 Documentation
 
 - [AI Foundry Agent Setup](https://learn.microsoft.com/azure/ai-foundry/agents/environment-setup)
-- [Connect to Fabric Data Agent](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/tools/fabric?pivots=portal)
+- [Connect to Fabric Data Agent](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/tools/fabric?pivots=portal) (deprecated tool, kept for reference)
 - [Official Reference - Create Fabric Data Agents](https://learn.microsoft.com/fabric/data-science/how-to-create-data-agent)
   
 

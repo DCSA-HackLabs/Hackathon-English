@@ -10,6 +10,8 @@ In production scenarios these flows may involve not only analysis but also actio
 
 ---
 
+> ⚠️ **Platform change:** Foundry Workflows (preview), the visual designer used in this challenge, retire on **December 1, 2026**. Microsoft recommends [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/overview/agent-framework-overview) for new multi-agent orchestration. The design skills in this challenge (roles, routing, message contracts, validation) apply to either tool.
+
 ### 🎯 Your Mission
 Upon completion you will be able to:
 
@@ -40,7 +42,7 @@ How do they collaborate to answer complex questions such as:
 ```
 "How do our premium product sales compare to market trends?"
 "Which products should we recommend to High-profile customers given current industry trends?"
-"Are our prices in the Electronics category competitive according to the market?"
+"Are our prices in the Laptops & Computers category competitive according to the market?"
 ```
 
 These questions require:
@@ -174,31 +176,31 @@ Foundry Workflows
 
 **Router Agent (Orchestrator):**
 
-- *Model*: **gpt-4o**
+- *Model*: **gpt-6-luna** (or another current model; gpt-4o is now Legacy)
 - *Tools*: **None** (analyzes query text)
 - *Instructions*: [Classify user intent and emit internal routing tags]
 
 **Sales Operations Analyst:**
 
-- *Model*: **gpt-4o**
-- *Tools*: **Fabric Data Agent [Contoso-Agent Sales] (business_operations)**
+- *Model*: **gpt-6-luna** (or another current model; gpt-4o is now Legacy)
+- *Tools*: **Fabric IQ → Contoso Agent-Sales data agent** (business_operations)
 - *Instructions*: [Focus on internal sales metrics]
 
 **Credit Risk Analyst:**
 
-- *Model*: **gpt-4o**
-- *Tools*: **Fabric Data Agent [Contoso-Agent Credit Risk] (credit_score)**
+- *Model*: **gpt-6-luna** (or another current model; gpt-4o is now Legacy)
+- *Tools*: **Fabric IQ → Contoso Agent-Credit-Risk data agent** (credit_score)
 - *Instructions*: [Focus on profiles and credit capacity]
 
 **Market Research Analyst:**
 
-- *Model*: **gpt-4o**
-- *Tools*: **Bing Search**
+- *Model*: **gpt-6-luna** (or another current model; gpt-4o is now Legacy)
+- *Tools*: **Web search** (Grounding with Bing). This is the only agent with web access
 - *Instructions*: [Focus on trends and public information]
 
 **Strategy Advisor:**
 
-- *Model*: **gpt-4o**
+- *Model*: **gpt-6-luna** (or another current model; gpt-4o is now Legacy)
 - *Tools*: **None** (receives variables from other agents)
 - *Instructions*: [Synthesize and generate strategic recommendations]
 
@@ -225,10 +227,11 @@ Foundry Workflows
 * If no single condition is true (`[CROSS]`) → go to `elseActions`
 
 **elseActions (cross-domain case):**
-* Restore `Local.LatestMessage` from `Local.UserQuestion`
-* Invoke Sales, Market Research and Credit Risk in sequence
-* Each agent appends its response to `Local.LatestMessage`
-* The Strategy Advisor receives the full history and synthesizes
+* Invoke Market Research, Sales and Credit Risk in sequence (Market Research first, before any internal data is in the conversation)
+* Restore `Local.LatestMessage` from `Local.UserQuestion` **before every agent**. Each agent's output overwrites `Local.LatestMessage`, so without the restore the next agent receives the previous agent's answer instead of the user's question
+* The Strategy Advisor reads the other agents' answers from the shared conversation history and synthesizes
+
+💡 *Security check:* the Market Research agent sends text to a public search engine. Make sure its input is only ever the user's question, never internal data from another agent.
 
 **End Node:**
 * Return final response to the user
@@ -244,11 +247,13 @@ Foundry Workflows
 **Test Scenarios**
 
 **Scenario 1: Market Comparison Analysis**
-- **Query**: "How do our iPhone sales compare to market trends?"
+- **Query**: "How do our smartphone sales compare to market trends?"
+
+(The dataset has a Smartphones category but no brand-name products such as iPhone, so a brand-specific question can't be answered from internal data.)
 
 Expected flow:
-Sales Analyst → Internal iPhone sales
-Market Research → Market trends for iPhone (Bing Search)
+Sales Analyst → Internal smartphone sales
+Market Research → Market trends for smartphones (Bing Search)
 Strategy Advisor → Comparison and gap analysis
 
 ✅ Expected result: Insight on market position with recommendations
@@ -279,6 +284,10 @@ Strategy Advisor → Gap analysis and recommendations
 Expected result: Competitiveness analysis with adjustment suggestions
 
 ✅ Expected result: Successful execution of the 3 scenarios with screenshots and analysis.
+
+**Optional: compare with a single agent**
+
+Create one agent with the same tools (both data agents and web search) and ask it the same 3 questions. Compare answer quality and response time with the workflow. Is the multi-agent design worth its extra hand-offs for these questions? Where would you still want separate agents (for example, to keep the web-facing agent away from internal data)?
 
 ---
 
